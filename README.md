@@ -7,8 +7,8 @@ progression over time.
 
 **Status: pre-build.** Nothing is implemented yet — this repo currently
 holds only the architecture handbook in `docs/`. Start with
-`docs/vision.md` for what this is and why, and `docs/roadmap.md` for build
-order.
+`docs/vision.md` for what this is and why, `docs/roadmap.md` for build
+order, and `docs/milestones.md` for exactly what to do next.
 
 ## Docs
 
@@ -23,4 +23,6 @@ order.
 - [`docs/learning-engine.md`](docs/learning-engine.md) — the session loop
 - [`docs/mcp.md`](docs/mcp.md) — later-stage MCP exposure
 - [`docs/roadmap.md`](docs/roadmap.md) — build order
+- [`docs/milestones.md`](docs/milestones.md) — detailed task-by-task
+  tracker; start here each session
 - [`docs/decisions.md`](docs/decisions.md) — ADR log

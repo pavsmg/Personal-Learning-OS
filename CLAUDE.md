@@ -13,8 +13,11 @@ vault. See `docs/vision.md` for the full picture.
 
 **Docs-only, nothing built.** This repo currently contains only the
 architecture handbook in `docs/` — no source code yet. `docs/roadmap.md`
-has the intended build order; don't start implementing steps out of order
-without checking with the user first.
+has the intended build order; `docs/milestones.md` breaks that into
+checkable tasks and tracks exactly where things stand — check its "Where to
+resume" section at the start of a session, and update it at the end of one,
+even a short one. Don't start implementing steps out of order without
+checking with the user first.
 
 ## Working here
 
