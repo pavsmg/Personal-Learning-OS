@@ -25,6 +25,12 @@ starts:
 Text-first is deliberate: validate the learning engine and tool-calling
 loop over text before adding the complexity of realtime audio.
 
+**Gate before step 7:** re-check `pedagogy.md` before starting the voice
+integration. Steps 1–6 (text-only) are cheap to validate against that doc's
+"realistic goals" (is the agent actually testing recall, not just
+discussing?) before sinking effort into realtime audio on top of a loop
+that hasn't been checked yet.
+
 ## Initial real-time voice provider
 
 Testing starts with the OpenAI Realtime API (low latency, WebRTC,

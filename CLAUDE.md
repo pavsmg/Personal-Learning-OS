@@ -34,3 +34,8 @@ without checking with the user first.
 - This project's relationship to `~/Projects/Language-Lab` is itself an ADR entry
   (`docs/decisions.md` #7) — read it before touching anything that overlaps
   with Language-Lab's scope (language practice specifically).
+- Read `docs/pedagogy.md` before adding a new learning mechanism (a review
+  algorithm, a quiz mode, a new session-planning heuristic) — check it
+  against the evidence and limitations there rather than assuming a feature
+  helps because it sounds reasonable. `docs/roadmap.md` gates the voice-MVP
+  step on revisiting this doc.

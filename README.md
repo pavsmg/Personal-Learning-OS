@@ -14,6 +14,8 @@ order.
 
 - [`docs/vision.md`](docs/vision.md) — what this is, what it should feel
   like to use
+- [`docs/pedagogy.md`](docs/pedagogy.md) — whether/why this should actually
+  help, honestly, including the counter-arguments
 - [`docs/architecture.md`](docs/architecture.md) — design principles
 - [`docs/domain-model.md`](docs/domain-model.md) — core entities
 - [`docs/tools.md`](docs/tools.md) — model/backend function interface
