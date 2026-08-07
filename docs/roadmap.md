@@ -50,7 +50,7 @@ just language practice.)
 
 ## Relationship to Language-Lab
 
-`Language-Lab` (`~/Language-Lab`) already implements a scoped-down version
+`Language-Lab` (`~/Projects/Language-Lab`) already implements a scoped-down version
 of this vision for exactly one domain: language practice. Its own
 `CLAUDE.md` has an equivalent Future Ideas backlog for language-specific
 extensions (sentence mining, Anki integration, benchmark comparisons,

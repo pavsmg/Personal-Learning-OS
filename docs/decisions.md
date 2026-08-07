@@ -102,7 +102,7 @@ voice (steps 7–8).
 
 ## 7. Language-Lab stays separate until Personal Learning OS reaches build stage
 
-**Context:** `Language-Lab` (`~/Language-Lab`) already implements a
+**Context:** `Language-Lab` (`~/Projects/Language-Lab`) already implements a
 scoped-down version of this vision for language practice specifically, with
 its own independently-evolving backlog.
 

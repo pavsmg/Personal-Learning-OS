@@ -31,6 +31,6 @@ without checking with the user first.
   the choice is made, not reconstructed afterward. Update an existing
   entry's Status (Proposed → Decided, or superseded) rather than leaving
   stale entries uncorrected.
-- This project's relationship to `~/Language-Lab` is itself an ADR entry
+- This project's relationship to `~/Projects/Language-Lab` is itself an ADR entry
   (`docs/decisions.md` #7) — read it before touching anything that overlaps
   with Language-Lab's scope (language practice specifically).
