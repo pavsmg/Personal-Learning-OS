@@ -26,14 +26,21 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 4 complete.** Next up: Milestone 5, first task ("Wire
-planner + retrieval + tool-calling into a minimal text chat loop (CLI is
-enough) against a text-capable LLM"). `create_session` is real and grounded
-in the vault; `finish_session`/`summarize_session` still raise
-`NotImplementedError` — Milestone 5 is where those get implemented for real,
-alongside the actual teacher-style conversation loop and the first
-LLM-provider choice (not yet made — open decision, log it in `decisions.md`
-when picked). See `decisions.md` #9–13 for the choices made so far.
+**Status: Milestone 5 complete.** Next up: Milestone 6, first task
+("Implement `save_mistake`/`search_mistakes`/`get_recent_mistakes` against
+the schema in `domain-model.md`"). The text conversation loop is real and
+pedagogy-checked (`conversation/` package); mistake data still doesn't
+exist anywhere — `mistakes/service.py`'s three functions still raise
+`NotImplementedError`, and closing that loop (wiring mistake detection into
+the conversation, then `recommend_review`/`estimate_mastery` back into the
+planner) is exactly Milestone 6's job. Also worth revisiting once Milestone
+6 lands: right now nothing in the conversation loop actually calls
+`save_mistake` when the agent catches an error — Milestone 5 only built the
+*conversational* correction behavior (verified in the pedagogy check-in
+below), not the *persistence* of those corrections as mistake entries; that
+wiring is Milestone 6's "wire mistake detection into Milestone 5's loop"
+task, not something this milestone was scoped to do. See `decisions.md`
+#9–14 for the choices made so far.
 
 ---
 
@@ -199,20 +206,80 @@ regression test).
 
 ## Milestone 5 — Text-only conversations (`roadmap.md` step 5)
 
-- [ ] Wire planner + retrieval + tool-calling into a minimal text chat loop
+- [x] Wire planner + retrieval + tool-calling into a minimal text chat loop
   (CLI is enough) against a text-capable LLM — no realtime API yet.
-- [ ] Implement the actual teacher-style behavior from `learning-engine.md`:
-  ask questions, request explanations, interrupt instead of
-  summarizing-after, revisit shaky concepts before the session ends.
-- [ ] Run at least 3 full sessions manually, across at least 2 domains.
-- [ ] **Pedagogy check-in:** review those 3 sessions against `pedagogy.md`'s
-  "realistic goals" — is the agent actually asking for
-  production/explanation, or drifting toward lecture-and-affirm? Write the
-  answer down here (or in a short note) before moving on; if it's drifting,
-  fix the prompting before Milestone 6, not after.
+  `conversation/loop.py`'s `start_session`/`send_message`/`end_session`
+  (plus a real interactive `run()` CLI, `uv run learning-os-chat`) call
+  `create_session` (Milestone 4) to open, expose exactly the 3 real
+  retrieval tools to the model via OpenAI function-calling (Milestone 2/3),
+  and call `finish_session`/`summarize_session` (now real, not stubs — see
+  below) to close. LLM: OpenAI Chat Completions, `decisions.md` #14.
+- [x] Implement the actual teacher-style behavior from `learning-engine.md`:
+  encoded as explicit rules in `conversation/prompt.py`'s system prompt
+  (ask-before-tell, immediate correction, no lecturing, ground in vault
+  content via tools, revisit shaky concepts before ending, open naturally).
+  `sessions/service.py` gained a real in-memory transcript
+  (`record_turn`/`_SESSIONS`, process-local — no persistence milestone has
+  been built yet) so `finish_session`/`summarize_session` are real: summary
+  is naive-but-real (which plan concepts were actually mentioned across the
+  transcript), consistent with Milestone 4's own "doesn't need to be smart"
+  precedent rather than adding LLM-based summarization.
+- [x] Ran 4 real sessions (1 more than required) across 3 domains: AI/ML
+  (`Adam optimizer`), language (`Turkish alphabet`), and chemistry
+  (`Reaction Rate`, run twice — once before and once after a prompt fix, see
+  check-in below).
+- [x] **Pedagogy check-in** (2026-08-10): **Mostly passes, with one real gap
+  found and fixed, not just noted.**
+  - **Asking for production before answering:** yes, consistently across
+    all 4 sessions — every opening and follow-up was a question ("how would
+    you explain X"), never a lecture opener.
+  - **Immediate correction — the actual finding:** session 1 (Adam
+    optimizer) and session 2 (Turkish alphabet) both correctly caught and
+    corrected wrong claims in the very next reply, grounded in real note
+    text (e.g. "29 letters... 8 vowels and 21 consonants," not the
+    learner's guessed "26, same as English"). Session 3 (Reaction Rate)
+    broke this: when the learner said *"if I raise concentration, rate goes
+    down... right?"* — a wrong claim hedged as a question — the model
+    **let it slide** and pivoted to its next planned question instead of
+    confirming or correcting it. This is exactly the failure mode
+    `pedagogy.md` warns about (a claim going unaddressed, not a lecture,
+    but the same practical effect: an error left standing). Root cause:
+    the original prompt's rule 2 said to address wrong statements but
+    didn't say what to do when a wrong claim is phrased as a tentative
+    question rather than a flat assertion, and the model treated it as
+    "already implicitly handled by moving on."
+  - **Fix applied, not just logged:** `prompt.py` rule 2 rewritten to
+    explicitly require confirming or correcting a claim — hedged or not —
+    before pivoting to a new question. Re-ran the *exact same* failing
+    exchange afterward: the model now responds "No — that's incorrect.
+    Higher concentration usually makes the rate go up, not down" before
+    continuing. Fix verified against the real case that exposed it, not
+    just assumed to work.
+  - **Revisit shaky concepts before ending:** present in all sessions (a
+    recall check before wrap-up each time), though generic ("what's one
+    thing you remember") rather than always targeting the specific concept
+    that was shakiest that session — a real but minor limitation, not
+    blocking.
+  - **Grounding in vault content:** confirmed genuine, not just claimed —
+    corrections consistently quoted actual note wording (letter counts,
+    Ç/Ğ pronunciation, Adam's "smarter version of gradient descent"
+    phrasing), meaning the model was actually calling `search_notes`/
+    `get_note`/`related_notes` rather than relying on general knowledge.
+  - **One unrelated minor observation, not fixed:** the model occasionally
+    (twice, out of ~20 assistant turns across all runs) emitted a single
+    reply with its own sentence duplicated verbatim
+    (`"Hi! ...?\nHi! ...?"`). Looks like an OpenAI-side decoding quirk, not
+    a bug in `loop.py` (tool-calling and multi-turn state were correct in
+    the same runs) — worth a `.strip()`-adjacent look during later polish,
+    not blocking this milestone.
 
 **Definition of done:** a real, unscripted text conversation that plans,
 quizzes, produces a session summary, and passes the pedagogy check-in above.
+**Done** — `uv run pytest` passes 65 tests, fully offline/mocked (no real
+API calls in the automated suite); 4 real sessions run across 3 domains: all
+produced real `SessionSummary` objects, and the one pedagogy gap the check-in
+found was fixed and re-verified against the real failing case, not just
+documented.
 
 ---
 

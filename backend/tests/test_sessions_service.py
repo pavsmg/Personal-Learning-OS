@@ -2,7 +2,12 @@ import uuid
 
 import pytest
 
-from learning_os.sessions.service import create_session, finish_session, summarize_session
+from learning_os.sessions.service import (
+    create_session,
+    finish_session,
+    record_turn,
+    summarize_session,
+)
 
 
 def write_vault(tmp_path, files: dict[str, str]):
@@ -59,11 +64,45 @@ def test_create_session_raises_when_topic_has_no_match(tmp_path, monkeypatch):
         create_session("xqzzptmnvbklw")
 
 
-def test_finish_session_not_implemented():
-    with pytest.raises(NotImplementedError):
-        finish_session("session-1")
+def test_finish_session_marks_known_session_finished(tmp_path, monkeypatch):
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    plan = create_session("gradient descent")
+
+    finish_session(plan.session_id)  # should not raise
 
 
-def test_summarize_session_not_implemented():
-    with pytest.raises(NotImplementedError):
-        summarize_session("session-1")
+def test_finish_session_unknown_id_raises_key_error():
+    with pytest.raises(KeyError):
+        finish_session("does-not-exist")
+
+
+def test_record_turn_unknown_id_raises_key_error():
+    with pytest.raises(KeyError):
+        record_turn("does-not-exist", "user", "hello")
+
+
+def test_summarize_session_reflects_mentioned_concepts(tmp_path, monkeypatch):
+    write_vault(
+        tmp_path,
+        {
+            "Gradient descent.md": "core optimization concept, linked to [[Optimizer]].",
+            "Optimizer.md": "general term for optimization algorithms.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    plan = create_session("gradient descent")
+    record_turn(plan.session_id, "user", "I think gradient descent just picks random directions.")
+    record_turn(plan.session_id, "assistant", "Not quite — gradient descent follows the steepest slope.")
+
+    summary = summarize_session(plan.session_id)
+
+    assert summary.session_id == plan.session_id
+    assert "Gradient descent" in summary.concepts_reinforced
+    assert "Optimizer" not in summary.concepts_reinforced
+    assert "2 exchanges" in summary.summary
+
+
+def test_summarize_session_unknown_id_raises_key_error():
+    with pytest.raises(KeyError):
+        summarize_session("does-not-exist")

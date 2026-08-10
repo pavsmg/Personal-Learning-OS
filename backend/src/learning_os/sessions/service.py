@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import dataclass, field
 
 from learning_os.retrieval import related_notes, search_notes
 from learning_os.sessions.models import SessionPlan, SessionSummary
@@ -6,6 +7,16 @@ from learning_os.sessions.models import SessionPlan, SessionSummary
 DEFAULT_TARGET_DIFFICULTY = "beginner"
 MINUTES_PER_CONCEPT = 5
 MINIMUM_DURATION_MINUTES = 15
+
+
+@dataclass
+class _SessionRecord:
+    plan: SessionPlan
+    turns: list[tuple[str, str]] = field(default_factory=list)
+    finished: bool = False
+
+
+_SESSIONS: dict[str, _SessionRecord] = {}
 
 
 def create_session(topic: str, max_concepts: int = 5) -> SessionPlan:
@@ -26,20 +37,46 @@ def create_session(topic: str, max_concepts: int = 5) -> SessionPlan:
 
     duration = max(MINIMUM_DURATION_MINUTES, MINUTES_PER_CONCEPT * len(concepts))
 
-    return SessionPlan(
+    plan = SessionPlan(
         session_id=str(uuid.uuid4()),
         objective=f"Review {anchor_title} and related concepts",
         concepts=concepts,
         target_difficulty=DEFAULT_TARGET_DIFFICULTY,
         expected_duration_minutes=duration,
     )
+    _SESSIONS[plan.session_id] = _SessionRecord(plan=plan)
+    return plan
+
+
+def record_turn(session_id: str, role: str, content: str) -> None:
+    _SESSIONS[session_id].turns.append((role, content))
 
 
 def finish_session(session_id: str) -> None:
-    """Stub — session lifecycle continues in Milestone 5."""
-    raise NotImplementedError("finish_session is not implemented yet (Milestone 5)")
+    if session_id not in _SESSIONS:
+        raise KeyError(f"Unknown session: {session_id}")
+    _SESSIONS[session_id].finished = True
 
 
 def summarize_session(session_id: str) -> SessionSummary:
-    """Stub — session lifecycle continues in Milestone 5."""
-    raise NotImplementedError("summarize_session is not implemented yet (Milestone 5)")
+    if session_id not in _SESSIONS:
+        raise KeyError(f"Unknown session: {session_id}")
+
+    record = _SESSIONS[session_id]
+    transcript = " ".join(content.lower() for _, content in record.turns)
+    concepts_reinforced = [c for c in record.plan.concepts if c.lower() in transcript]
+
+    summary = (
+        f"Session on {record.plan.objective!r}: {len(record.turns)} exchanges. "
+        + (
+            f"Concepts reinforced: {', '.join(concepts_reinforced)}."
+            if concepts_reinforced
+            else "No plan concepts were confirmed as discussed."
+        )
+    )
+
+    return SessionSummary(
+        session_id=session_id,
+        summary=summary,
+        concepts_reinforced=concepts_reinforced,
+    )

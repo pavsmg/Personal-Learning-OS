@@ -243,4 +243,35 @@ module folder yet — no milestone has created one — so their stubs live
 provisionally in `tools_interface/stubs.py` rather than inventing new module
 boundaries this milestone wasn't scoped to decide.
 
+**Status:** Partially superseded by #14 — the "real consumer at Milestone
+7/10" assumption was wrong. Milestone 5's own text chat loop needed
+JSON-schema generation immediately (OpenAI's function-calling requires a
+JSON Schema per tool), so `Tool.parameters_schema` was added there instead,
+computed automatically via introspection at `register()` time with no
+changes needed to any call site. The registry/dispatch design itself
+(`Tool`, `TOOLS`, `call_tool`) is otherwise unchanged and still Decided.
+
+---
+
+## 14. OpenAI Chat Completions for Milestone 5's text-only conversations
+
+**Context:** Milestone 5 needed a concrete text-capable LLM to wire the
+planner/retrieval/tool-calling loop against. User had a working
+`OPENAI_API_KEY` already (used earlier this session), and `decisions.md` #5
+already picked OpenAI for the later Realtime voice API (Milestone 7) — user
+chose to keep one provider through both, though `architecture.md`'s
+provider-resilience principle doesn't require that (`llm_client.py` is the
+only file that touches the OpenAI SDK's response shape; the rest of
+`conversation/loop.py` works against a provider-agnostic `LLMReply` type).
+
+**Decision:** OpenAI Chat Completions API via the official `openai` SDK.
+Model is configurable (`Settings.openai_model`, `OPENAI_MODEL` env var),
+defaulting to `gpt-5.4-mini` — checked against the live API
+(`client.models.list()`) rather than assumed, and confirmed to support
+function-calling with a real test call before committing to it. Only the 3
+real retrieval tools (`search_notes`/`get_note`/`related_notes`) are exposed
+to the model during conversation; `create_session`/`finish_session`/
+`summarize_session` are backend-orchestrated around the conversation, not
+model-callable tools, so session lifecycle stays a backend decision.
+
 **Status:** Decided (2026-08-10).
