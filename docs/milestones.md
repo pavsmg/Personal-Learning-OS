@@ -26,14 +26,17 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 2 complete.** Next up: Milestone 3, first task ("Define
-the function-calling contract as actual code interfaces"). The three
-`retrieval` functions (`search_notes`, `get_note`, `related_notes` in
-`backend/src/learning_os/retrieval/`) are implemented and validated against
-the real vault — Milestone 3's job is to formally wire them (plus stubs for
-the rest of `tools.md`) behind the tool-calling contract; no FastAPI routes
-or JSON-schema tool definitions exist yet. See `decisions.md` #9–12 for the
-language/persistence/runtime/search choices made so far.
+**Status: Milestone 3 complete.** Next up: Milestone 4, first task
+("Implement the session data model from `domain-model.md`"). The full
+`tools.md` contract now exists in code (`tools_interface.TOOLS`/`call_tool`)
+with real retrieval wired and honest stubs everywhere else —
+`sessions/service.py`'s `create_session`/`finish_session`/`summarize_session`
+(currently raising `NotImplementedError`) is exactly what Milestone 4
+replaces with real logic; its `SessionPlan`/`SessionSummary` models already
+exist in `sessions/models.py` with the fields milestones.md already
+committed to (objective, concepts, target difficulty, expected duration).
+See `decisions.md` #9–12 for the language/persistence/runtime/search choices
+made so far.
 
 ---
 
@@ -127,16 +130,38 @@ automatically if the vault isn't present on the machine running them).
 
 ## Milestone 3 — Tool/function architecture (`roadmap.md` step 3, `tools.md`)
 
-- [ ] Define the function-calling contract as actual code interfaces
-  (names, params, return types) — not just the prose list in `tools.md`.
-- [ ] Wire Milestone 2's three retrieval functions behind that contract.
-- [ ] Stub every other function from `tools.md` (mistakes, sessions,
-  language module, stats) so the full contract exists even before each
-  module is implemented — callers can rely on the shape early.
+- [x] Define the function-calling contract as actual code interfaces (names,
+  params, return types): `tools_interface/registry.py`'s `Tool`
+  dataclass + `TOOLS: dict[str, Tool]` + `call_tool(name, **kwargs)`
+  dispatcher, populated at import time in `tools_interface/__init__.py`
+  from all 18 functions named in `tools.md`, each with real Python type
+  hints (and pydantic models — `MistakeEntry`, `SessionPlan`/`SessionSummary`,
+  `MasteryEstimate`, `JobFitAnalysis` — for the structured ones) rather than
+  just the prose list.
+- [x] Wire Milestone 2's three retrieval functions behind that contract —
+  `search_notes`/`get_note`/`related_notes` registered directly from
+  `learning_os.retrieval`, no reimplementation.
+- [x] Stub every other function from `tools.md`. Mistakes and sessions each
+  got their own module (`mistakes/service.py`, `sessions/service.py`,
+  matching `retrieval/service.py`'s pattern — typed signatures per
+  `domain-model.md`'s `MistakeEntry` fields and milestones.md M4's session
+  fields, bodies raise `NotImplementedError` naming the milestone that
+  implements them). Progression, Language module, Stats, and Career don't
+  have a dedicated module yet (no milestone has created one), so their
+  stubs live provisionally in `tools_interface/stubs.py` — expect these to
+  move out into their own modules once Milestones 6/9/7 actually implement
+  them.
 
 **Definition of done:** one consistent interface exists that a model could
 call today, with real retrieval behind three functions and honest stubs
-behind the rest.
+behind the rest. **Done** — `call_tool("search_notes", query=...)` dispatches
+to the real Milestone 2 implementation; `call_tool` on any of the other 15
+names raises a `NotImplementedError` naming which milestone implements it;
+an unknown tool name raises `KeyError`. `uv run pytest` passes 53 tests
+(3 new files covering the registry's completeness/dispatch behavior and
+each stub module's honest-failure behavior). No FastAPI routes or JSON-schema
+generation were added — that's Milestone 7 (Realtime function-calling) and
+Milestone 11 (MCP)'s job to build on top of this registry, not this one's.
 
 ---
 

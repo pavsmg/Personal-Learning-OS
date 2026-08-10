@@ -213,3 +213,34 @@ principle (#2) — callers never see the scoring internals.
 resolves only the keyword-search half of `retrieval.md`'s open question;
 embeddings/semantic search remains open, to revisit once real conversational
 sessions (Milestone 5) exercise search quality against real usage.
+
+---
+
+## 13. Tool-calling contract represented as an in-process registry (`Tool` dataclass + `TOOLS` dict + `call_tool`)
+
+**Context:** Milestone 3 needed to turn `tools.md`'s prose function list into
+actual code: something a future caller (Milestone 7's Realtime integration,
+Milestone 11's MCP server) can look up by name and invoke, not just 18
+independently-typed Python functions with no common handle.
+
+**Decision:** `tools_interface/registry.py` defines a minimal `Tool`
+dataclass (name, description, handler), a `TOOLS: dict[str, Tool]` populated
+at import time, and `call_tool(name, **kwargs)` for dispatch. Deliberately
+no JSON-schema generation or pydantic-model-per-parameter validation layer
+yet — that's real work with a real consumer at Milestone 7/10, not needed to
+satisfy this milestone's "one consistent interface" requirement, and
+building it now would be guessing at a shape those milestones haven't
+determined yet. Structured return types (`MistakeEntry`, `SessionPlan`/
+`SessionSummary`, `MasteryEstimate`, `JobFitAnalysis`) use pydantic
+`BaseModel` for free JSON serialization later, matching `retrieval/models.py`'s
+existing pattern.
+
+Also decided: `mistakes/` and `sessions/` each got a real `service.py` (typed
+stub functions raising `NotImplementedError`, living in the module their
+future real implementation will occupy) since Milestone 1 already created
+those folders. Progression, Language module, Stats, and Career have no
+module folder yet — no milestone has created one — so their stubs live
+provisionally in `tools_interface/stubs.py` rather than inventing new module
+boundaries this milestone wasn't scoped to decide.
+
+**Status:** Decided (2026-08-10).
