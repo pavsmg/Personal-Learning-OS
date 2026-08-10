@@ -5,10 +5,28 @@ review, and organize knowledge across an entire Obsidian vault — not a
 chatbot, a coach that knows the knowledge base, past mistakes, and
 progression over time.
 
-**Status: pre-build.** Nothing is implemented yet — this repo currently
-holds only the architecture handbook in `docs/`. Start with
-`docs/vision.md` for what this is and why, `docs/roadmap.md` for build
-order, and `docs/milestones.md` for exactly what to do next.
+**Status: build started.** Milestone 0 (project scaffold) is in place under
+`backend/`; see `docs/milestones.md` for exactly what's done and what's
+next. Start with `docs/vision.md` for what this is and why, and
+`docs/roadmap.md` for build order.
+
+## Backend dev setup
+
+The backend lives in `backend/` (Python + FastAPI, managed with
+[`uv`](https://docs.astral.sh/uv/); see `docs/decisions.md` #9–11 for why).
+
+```sh
+cd backend
+uv run learning-os        # starts the server on http://127.0.0.1:8000
+```
+
+Run the test suite (or a single test) with:
+
+```sh
+cd backend
+uv run pytest                          # whole suite
+uv run pytest tests/test_main.py -v    # one file
+```
 
 ## Docs
 

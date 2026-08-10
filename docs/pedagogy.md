@@ -7,7 +7,7 @@ Written to include real counter-arguments, not just supporting evidence —
 a rationale that only cites evidence for what's already been designed
 isn't a check, it's a rationalization.
 
-**Gate:** revisit this doc before `roadmap.md`'s voice-MVP step (steps 7–8).
+**Gate:** revisit this doc before `roadmap.md`'s voice-MVP step (steps 8–9).
 If the case for a specific piece is weak, that should change scope or
 build order before code gets written around it, not after.
 

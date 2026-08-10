@@ -40,3 +40,11 @@ later.
 ## Stats
 
 - `get_learning_statistics`
+
+## Career (`domain-model.md`'s learner profile, read-only)
+
+- `summarize_skills_for_cv` — turn current per-domain mastery into CV-ready
+  skill language.
+- `analyze_job_fit` — given a target job description, compare it against the
+  learner profile: which tracked strengths to foreground, which required
+  skills are gaps not yet covered by the profile.

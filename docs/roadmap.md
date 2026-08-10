@@ -16,19 +16,23 @@ starts:
 4. Session planner (`learning-engine.md`)
 5. Text-only conversations — prove the loop before adding voice
 6. Mistake-memory updates (`domain-model.md`)
-7. OpenAI Realtime integration (see "Initial real-time voice provider"
+7. Career/CV coaching (`tools.md`'s Career functions) — reads mastery/mistake
+   data that only becomes real as of step 6, so it can't land any earlier
+8. OpenAI Realtime integration (see "Initial real-time voice provider"
    below)
-8. Voice conversations
-9. Language coaching — once the Language-Lab integration below is actually
-   figured out
-10. MCP server (`mcp.md`)
-11. Additional AI providers
+9. Voice conversations
+10. Language coaching — once the Language-Lab integration below is actually
+    figured out
+11. MCP server (`mcp.md`)
+12. Additional AI providers
 
 Text-first is deliberate: validate the learning engine and tool-calling
-loop over text before adding the complexity of realtime audio.
+loop over text before adding the complexity of realtime audio. Step 7 fits
+this: it's a text-only, non-voice capability, so it belongs before the
+realtime work starts, not after.
 
-**Gate before step 7:** re-check `pedagogy.md` before starting the voice
-integration. Steps 1–6 (text-only) are cheap to validate against that doc's
+**Gate before step 8:** re-check `pedagogy.md` before starting the voice
+integration. Steps 1–7 (text-only) are cheap to validate against that doc's
 "realistic goals" (is the agent actually testing recall, not just
 discussing?) before sinking effort into realtime audio on top of a loop
 that hasn't been checked yet.

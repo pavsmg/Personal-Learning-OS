@@ -24,6 +24,16 @@ error memory, conversations, summaries, progression, newly-acquired
 knowledge, learning statistics. The experience should be transparent — no
 manual export/import step between devices.
 
+## Career/CV coaching
+
+Because the system tracks per-domain mastery and mistake history over time
+(`domain-model.md`), it can also turn that record outward: summarize actual
+technical strengths into CV-ready language, and — given a target job
+description — say which of those strengths to foreground and which gaps
+still need work before applying. This reads the same learner-profile data
+every other feature reads; it doesn't require a separate skill-tracking
+system.
+
 ## Core principle
 
 A single conversation should simultaneously: practice a skill, evaluate

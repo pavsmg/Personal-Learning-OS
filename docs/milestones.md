@@ -26,8 +26,11 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: not started.** Next up: Milestone 0, first task ("Choose backend
-language/framework").
+**Status: Milestone 0 complete.** Next up: Milestone 1, first task ("Lay
+out module boundaries per `architecture.md`'s modular-architecture list").
+Backend scaffold lives in `backend/` (Python + FastAPI + uv); see
+`decisions.md` #9–11 for the language/persistence/runtime choices made to
+get here.
 
 ---
 
@@ -36,23 +39,29 @@ language/framework").
 Not itself one of `roadmap.md`'s numbered steps — the scaffolding those
 steps assume already exists.
 
-- [ ] Choose backend language/framework. Open decision — log the choice and
-  why in `decisions.md` once made. (Note: `realtime-test/` in `Language-Lab`
-  is Node; `turkish-nlp` is Python; neither commits this project to either.)
-- [ ] Choose persistence approach for mistake/session/profile data (flat
-  files à la `Language-Lab`'s `MISTAKES.md`/`PRACTICE_LOG.md`, SQLite, JSON,
-  something else). Log as an ADR — this is exactly the kind of schema
-  decision `CLAUDE.md` asks to be logged when made, not reconstructed later.
-- [ ] Decide where the backend runs (local process, container) for initial
-  development — doesn't need to be the final answer, just enough to start.
-- [ ] Basic project scaffold: manifest/dependency file, entrypoint, a
-  `dev`-running README section.
-- [ ] Minimal test setup (even just "how to run one test") decided up front,
-  not bolted on later.
+- [x] Choose backend language/framework: Python + FastAPI, dependency
+  management via `uv`. Logged in `decisions.md` #9.
+- [x] Choose persistence approach for mistake/session/profile data: SQLite
+  as the live store, with periodic backups plus a git-tracked flat-file
+  export for a diffable audit trail. Logged in `decisions.md` #10. (Not
+  wired up yet — that's Milestone 1/6's job; this milestone only needed the
+  decision made.)
+- [x] Decide where the backend runs: local process (`uv run`) for initial
+  development. Logged in `decisions.md` #11.
+- [x] Basic project scaffold: `backend/pyproject.toml`,
+  `backend/src/learning_os/main.py` (FastAPI app + `run()` entrypoint,
+  wired as the `learning-os` script), dev-running section in the root
+  README.
+- [x] Minimal test setup: pytest + httpx, one passing test
+  (`backend/tests/test_main.py`), `uv run pytest` documented in the README.
 
 **Definition of done:** a backend project exists that runs, has an obvious
 place to add each module from `architecture.md`, and the two open decisions
-above are logged in `decisions.md`.
+above are logged in `decisions.md`. **Done** — `uv run learning-os` serves
+`GET /` returning `{"status": "ok", "service": "learning-os"}`; `uv run
+pytest` passes. Module folders (retrieval/mistakes/sessions/tools-interface)
+are deliberately not created yet — that's Milestone 1's explicit task, not
+this one's.
 
 ---
 
@@ -156,6 +165,28 @@ demonstrably closed, not just each half built in isolation.
 
 ---
 
+## Milestone 7 — Career/CV coaching (`roadmap.md` step 7, `tools.md`'s
+Career functions)
+
+- [ ] Implement `summarize_skills_for_cv` — read the learner profile
+  (`domain-model.md`) and produce a CV-ready summary of actual technical
+  strengths (e.g. database knowledge), grounded in tracked mastery rather
+  than self-reported skill level.
+- [ ] Implement `analyze_job_fit` — take a target job description as input,
+  compare its stated requirements against the learner profile, and return
+  two things: which tracked strengths to foreground for that role, and
+  which required skills are gaps not yet covered by the profile.
+- [ ] Validate against at least one real job description and confirm the
+  gap list matches what the user already knows they're weak on — this is a
+  read-only feature on top of existing data, not a new tracking mechanism,
+  so it needs no schema changes to `domain-model.md`.
+
+**Definition of done:** given a real job posting, the assistant produces a
+CV skills summary and an honest gap list, both grounded in real mastery
+data rather than guesswork.
+
+---
+
 ## Gate — re-check `pedagogy.md` before voice (per `roadmap.md`)
 
 - [ ] Review all Milestone 5–6 session logs against `pedagogy.md`'s
@@ -165,7 +196,7 @@ demonstrably closed, not just each half built in isolation.
 
 ---
 
-## Milestone 7 — OpenAI Realtime integration (`roadmap.md` step 7)
+## Milestone 8 — OpenAI Realtime integration (`roadmap.md` step 8)
 
 - [ ] Get a working realtime smoke test in this project's context (see
   `Language-Lab/realtime-test/` for a minimal existing WebSocket example
@@ -181,7 +212,7 @@ backend tool call (e.g. `search_notes`) and speak back a real result.
 
 ---
 
-## Milestone 8 — Voice conversations (`roadmap.md` step 8)
+## Milestone 9 — Voice conversations (`roadmap.md` step 9)
 
 - [ ] Port the full session loop (plan → converse → detect mistakes →
   summarize → update memory) from text (Milestones 5–6) to voice.
@@ -194,7 +225,7 @@ same pedagogy check applied.
 
 ---
 
-## Milestone 9 — Language coaching integration (`roadmap.md` step 9)
+## Milestone 10 — Language coaching integration (`roadmap.md` step 10)
 
 - [ ] Design the integration contract between `tools.md` and
   `Language-Lab`'s existing tracked files (`ROADMAP.md`, `MISTAKES.md`,
@@ -211,7 +242,7 @@ Language-Lab practice history into its planning, for at least one language.
 
 ---
 
-## Milestone 10 — MCP server (`roadmap.md` step 10, `mcp.md`)
+## Milestone 11 — MCP server (`roadmap.md` step 11, `mcp.md`)
 
 - [ ] Thin transport layer wrapping the existing `tools.md` contract — no
   new logic, per `mcp.md`.
@@ -223,7 +254,7 @@ week" is answerable from outside the voice app.
 
 ---
 
-## Milestone 11 — Additional AI providers (`roadmap.md` step 11)
+## Milestone 12 — Additional AI providers (`roadmap.md` step 12)
 
 - [ ] Evaluate at least one alternative realtime voice provider, per the
   provider-resilience decision (`decisions.md` #2/#5).
