@@ -26,13 +26,14 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 1 complete.** Next up: Milestone 2, first task ("Note
-loader: parse vault markdown files, `[[wikilinks]]`, and YAML
-frontmatter"). Backend scaffold lives in `backend/` (Python + FastAPI +
-uv); see `decisions.md` #9–11 for the language/persistence/runtime choices.
-Config is read from env/`.env` via `learning_os/config.py` (copy
-`backend/.env.example` to `backend/.env` and set `VAULT_PATH` before
-running `retrieval` work in Milestone 2).
+**Status: Milestone 2 complete.** Next up: Milestone 3, first task ("Define
+the function-calling contract as actual code interfaces"). The three
+`retrieval` functions (`search_notes`, `get_note`, `related_notes` in
+`backend/src/learning_os/retrieval/`) are implemented and validated against
+the real vault — Milestone 3's job is to formally wire them (plus stubs for
+the rest of `tools.md`) behind the tool-calling contract; no FastAPI routes
+or JSON-schema tool definitions exist yet. See `decisions.md` #9–12 for the
+language/persistence/runtime/search choices made so far.
 
 ---
 
@@ -94,20 +95,33 @@ new `/health` cases with and without config present).
 
 ## Milestone 2 — Obsidian retrieval (`roadmap.md` step 2, `retrieval.md`)
 
-- [ ] Note loader: parse vault markdown files, `[[wikilinks]]`, and YAML
-  frontmatter.
-- [ ] Implement `search_notes` — start with keyword/full-text search;
-  embeddings/vector search is an open choice, not a prerequisite (see
-  `retrieval.md`'s "no specific retrieval technology has been chosen yet").
-- [ ] Implement `get_note` — fetch a single note's content + metadata.
-- [ ] Implement `related_notes` — wikilink graph traversal, 1-hop to start
-  (2-hop is a later refinement, not needed for a first pass).
-- [ ] Manually validate against real vault content across at least two
-  different domains (e.g. an algorithms/CS topic and one language roadmap)
-  — retrieval that only works for one domain's note shape isn't validated.
+- [x] Note loader: `backend/src/learning_os/retrieval/loader.py` parses
+  vault markdown files, `[[wikilinks]]` (incl. piped aliases, excluding
+  image embeds), and leading YAML frontmatter (gracefully falling back to
+  `{}` on absence or malformed/non-dict YAML — never crashes the whole
+  vault load on one bad file).
+- [x] Implement `search_notes` — naive weighted keyword/token scoring
+  (title/tags/body), no external library or embeddings. Logged as
+  `decisions.md` #12 (interim/provisional, same status as #11).
+- [x] Implement `get_note` — case-insensitive title lookup, returns full
+  content + frontmatter + tags + outgoing links.
+- [x] Implement `related_notes` — 1-hop, **bidirectional** (outgoing links
+  + backlinks, deduped, self excluded); 2-hop and embeddings deliberately
+  deferred per this doc's own note.
+- [x] Manually validated against real vault content
+  (`~/Documents/Obsidian-Digital-Brain`, 1441 notes) across two domains:
+  AI/ML (`Adam optimizer` ↔ `Gradient descent`, the latter reached mainly
+  via backlinks — proves bidirectionality matters) and language
+  (`TURKISH ROADMAP` → `Turkish alphabet` ← `Turkish Study Plan`). See
+  `backend/tests/test_retrieval_real_vault.py` for the automated regression
+  version of this same validation.
 
 **Definition of done:** all three functions return correct results against
-real vault notes in at least two domains.
+real vault notes in at least two domains. **Done** — `uv run pytest` passes
+43 tests (loader unit tests incl. real vault edge cases like the
+no-closing-`---` file and zero-byte notes; index unit tests on synthetic
+notes; real-vault integration tests across both domains, skipped
+automatically if the vault isn't present on the machine running them).
 
 ---
 

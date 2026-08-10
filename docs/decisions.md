@@ -192,3 +192,24 @@ revisited once the vision doc's cross-device sync/portability goals are
 actually being built toward.
 
 **Status:** Decided (2026-08-10) — provisional, may revisit.
+
+---
+
+## 12. `search_notes` uses naive weighted keyword/token scoring, no external search library or embeddings
+
+**Context:** `retrieval.md` deliberately left retrieval technology an open
+question at project inception ("no specific retrieval technology has been
+chosen yet"). Milestone 2 needed a concrete `search_notes` implementation to
+validate against the real vault.
+
+**Decision:** In-process scoring over the whole loaded vault: tokenize the
+query, score each note by (exact-phrase title match bonus) + weighted
+per-token counts across title/tags/body, no external search library (no
+SQLite FTS, no Whoosh) and no embeddings/vector search. Swappable later
+behind the same `search_notes(query)` signature per the provider-resilience
+principle (#2) — callers never see the scoring internals.
+
+**Status:** Decided (2026-08-10) — interim/provisional, same as #11. This
+resolves only the keyword-search half of `retrieval.md`'s open question;
+embeddings/semantic search remains open, to revisit once real conversational
+sessions (Milestone 5) exercise search quality against real usage.
