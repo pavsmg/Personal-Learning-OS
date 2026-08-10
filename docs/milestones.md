@@ -26,11 +26,13 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 0 complete.** Next up: Milestone 1, first task ("Lay
-out module boundaries per `architecture.md`'s modular-architecture list").
-Backend scaffold lives in `backend/` (Python + FastAPI + uv); see
-`decisions.md` #9–11 for the language/persistence/runtime choices made to
-get here.
+**Status: Milestone 1 complete.** Next up: Milestone 2, first task ("Note
+loader: parse vault markdown files, `[[wikilinks]]`, and YAML
+frontmatter"). Backend scaffold lives in `backend/` (Python + FastAPI +
+uv); see `decisions.md` #9–11 for the language/persistence/runtime choices.
+Config is read from env/`.env` via `learning_os/config.py` (copy
+`backend/.env.example` to `backend/.env` and set `VAULT_PATH` before
+running `retrieval` work in Milestone 2).
 
 ---
 
@@ -67,17 +69,26 @@ this one's.
 
 ## Milestone 1 — Backend service (`roadmap.md` step 1)
 
-- [ ] Lay out module boundaries per `architecture.md`'s modular-architecture
-  list (retrieval, mistakes, sessions, tools-interface as separate
-  packages/folders from the start, even if most are still empty).
-- [ ] Config/env handling for API keys and the vault path — kept
-  provider-agnostic per the provider-resilience principle (no
-  provider-specific config baked outside its own module).
-- [ ] Health-check / run entrypoint.
+- [x] Lay out module boundaries per `architecture.md`'s modular-architecture
+  list: `backend/src/learning_os/{retrieval,mistakes,sessions,
+  tools_interface}/` created as empty packages (hyphen in "tools-interface"
+  isn't valid in a Python module name, hence the underscore).
+- [x] Config/env handling for API keys and the vault path: `config.py`'s
+  `Settings` (pydantic-settings, reads `.env`/env vars) holds `vault_path`
+  and `openai_api_key` — generic settings object, no provider-specific
+  logic baked outside its own module. `.env.example` documents the two
+  vars.
+- [x] Health-check / run entrypoint: `GET /health` reports config-load
+  status, whether `vault_path` resolves to a real path, and whether an
+  OpenAI key is set (booleans only — never echoes the key itself).
 
 **Definition of done:** process runs; module boundaries exist; nothing
 provider-specific leaks outside its own module yet (nothing to leak yet,
-but the folder structure shouldn't invite it later).
+but the folder structure shouldn't invite it later). **Done** — verified
+live: `uv run learning-os` with `VAULT_PATH` set serves a `/health` that
+correctly reports `config_loaded`, `vault_path_exists`, and
+`openai_api_key_set`; `uv run pytest` passes (3 tests total, including two
+new `/health` cases with and without config present).
 
 ---
 
