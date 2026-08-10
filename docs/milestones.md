@@ -26,17 +26,14 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 3 complete.** Next up: Milestone 4, first task
-("Implement the session data model from `domain-model.md`"). The full
-`tools.md` contract now exists in code (`tools_interface.TOOLS`/`call_tool`)
-with real retrieval wired and honest stubs everywhere else —
-`sessions/service.py`'s `create_session`/`finish_session`/`summarize_session`
-(currently raising `NotImplementedError`) is exactly what Milestone 4
-replaces with real logic; its `SessionPlan`/`SessionSummary` models already
-exist in `sessions/models.py` with the fields milestones.md already
-committed to (objective, concepts, target difficulty, expected duration).
-See `decisions.md` #9–12 for the language/persistence/runtime/search choices
-made so far.
+**Status: Milestone 4 complete.** Next up: Milestone 5, first task ("Wire
+planner + retrieval + tool-calling into a minimal text chat loop (CLI is
+enough) against a text-capable LLM"). `create_session` is real and grounded
+in the vault; `finish_session`/`summarize_session` still raise
+`NotImplementedError` — Milestone 5 is where those get implemented for real,
+alongside the actual teacher-style conversation loop and the first
+LLM-provider choice (not yet made — open decision, log it in `decisions.md`
+when picked). See `decisions.md` #9–13 for the choices made so far.
 
 ---
 
@@ -167,16 +164,36 @@ Milestone 11 (MCP)'s job to build on top of this registry, not this one's.
 
 ## Milestone 4 — Session planner (`roadmap.md` step 4, `learning-engine.md`)
 
-- [ ] Implement the session data model from `domain-model.md` (objective,
-  concepts to review, target difficulty, expected duration).
-- [ ] Implement `create_session` using retrieval (mistake data doesn't
-  exist yet at this point — that's fine, plan without it for now).
-- [ ] Build planning heuristic v1 — doesn't need to be smart, just
-  functional (e.g., pick N related notes for the requested topic via
-  `related_notes`).
+- [x] Implement the session data model from `domain-model.md` (objective,
+  concepts to review, target difficulty, expected duration) — already
+  existed as `sessions/models.py`'s `SessionPlan` since Milestone 3, no
+  change needed.
+- [x] Implement `create_session` using retrieval (mistake data doesn't
+  exist yet at this point — that's fine, plan without it for now):
+  `target_difficulty` is a fixed `"beginner"` default and
+  `expected_duration_minutes` is derived only from concept count (5 min/
+  concept, 15 min floor) — both honestly provisional until Milestone 6
+  gives mastery data to inform them for real.
+- [x] Build planning heuristic v1 — doesn't need to be smart, just
+  functional: anchor on `search_notes(topic, limit=1)`'s best match, expand
+  via `related_notes(anchor)` up to `max_concepts` (default 5). Raises
+  `ValueError` if the topic matches no vault note at all — a session with
+  no real grounding isn't a session, not a case worth faking a plan for.
+- [x] While here: corrected `finish_session`/`summarize_session`'s stub
+  docstrings, which had over-claimed "Milestone 4" back in Milestone 3 —
+  this milestone's task list only ever covered `create_session`; the other
+  two now point at Milestone 5, where `learning-engine.md`'s session-ends
+  step (summary generation, memory update) actually lives.
 
 **Definition of done:** `create_session` produces a real plan grounded in
-actual vault content, even with a naive heuristic.
+actual vault content, even with a naive heuristic. **Done** — validated
+against the real vault across two domains: `create_session("Adam
+optimizer")` → `['Adam optimizer', 'Gradient descent', 'Optimizer',
+'Optimizers & Training Mechanics']`; `create_session("Turkish alphabet")` →
+`['Turkish alphabet', 'TURKISH ROADMAP', 'Turkish Study Plan']`. `uv run
+pytest` passes 56 tests (synthetic-vault unit tests for the heuristic,
+max_concepts capping, and the no-match error path, plus a real-vault
+regression test).
 
 ---
 
