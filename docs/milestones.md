@@ -30,7 +30,9 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 providers (`roadmap.md` step 12): evaluate at least one alternative
 realtime voice provider per the provider-resilience decision
 (`decisions.md` #2/#5), confirming a switch doesn't touch
-`domain-model.md` data. The backend now has three live consumers of
+`domain-model.md` data. **Blocked** as of 2026-08-11: no API key for a
+second provider yet — pick this up once one is available, rather than
+building against a provider that can't be validated with a real key. The backend now has three live consumers of
 `tools_interface.TOOLS`: the text loop, the voice loop, and (as of
 Milestone 11) an MCP server (`mcp_server/server.py`) exposing all 18
 tools generically over stdio to secondary clients like Claude
