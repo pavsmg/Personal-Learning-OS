@@ -1,9 +1,10 @@
 # Roadmap
 
-Status: **not started.** This is the intended build order once work begins
-— nothing below has been built yet. See `milestones.md` for the detailed,
-checkable task breakdown of each step below, and its "Where to resume"
-section for exactly what to pick up next.
+Status: **Milestone 11 of 12 complete.** This is the intended build order;
+steps 1–11 below have been built, tested, and validated against real data.
+See `milestones.md` for the detailed, checkable task breakdown of each
+step below, and its "Where to resume" section for exactly what to pick up
+next.
 
 ## Initial build order
 

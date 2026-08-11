@@ -5,12 +5,12 @@ project gets an entry here, written when the choice is made — not
 reconstructed after the fact. Format: Context / Decision / Status.
 
 Entries 1–7 below are seeded from the original brainstorming conversation
-(2026-08-05) that produced this project's vision — they're marked
-**Proposed** rather than **Decided** except where the source material
-already treated them as settled, since nothing has actually been built
-against them yet. Revisit and confirm (or revise) each one as the relevant
-part of the roadmap is actually reached, rather than treating them as
-locked in from day one.
+(2026-08-05) that produced this project's vision. They were originally
+marked **Proposed** rather than **Decided**, pending confirmation once the
+relevant part of the roadmap was actually reached rather than treated as
+locked in from day one. As of Milestone 11 (2026-08-11), all of 1–6 have
+been built against and confirmed — see each entry's Status line for what
+actually happened.
 
 ---
 
@@ -25,7 +25,10 @@ provider-independent code (`architecture.md`). The model's job is limited
 to conversation, reasoning, explanation, tone, and deciding which tool to
 call.
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — confirmed by Milestone 11: mastery
+calculation, session planning, and mistake persistence have stayed
+backend-only through 11 milestones and three different consumers (text
+loop, voice loop, MCP server), with no logic duplicated into any of them.
 
 ---
 
@@ -38,7 +41,13 @@ principle, but scoped only to the real-time conversation provider.
 LLM, transcription engine, embedding engine, search engine. Each must be
 swappable without touching durable data (knowledge, mistakes, progression).
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — confirmed for the LLM (Chat Completions
+vs. Realtime, #14/#20) and the voice provider (#5) so far, both isolated
+behind the tool contract with no durable-data coupling. Search-engine and
+embedding-engine swappability is unexercised so far (`search_notes` has
+only ever had one implementation, #12) — the principle stands as a
+constraint on new code, not yet validated by an actual swap for those two.
+Milestone 12 (a second realtime voice provider) is the next real test.
 
 ---
 
@@ -52,7 +61,11 @@ session planning, question generation, real-time conversation, evaluation,
 memory, sync, transcription, conversation analysis, plus the existing
 Language-Lab module.
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — confirmed by the actual package layout
+(`retrieval/`, `sessions/`, `mistakes/`, `career/`, `realtime/`,
+`language/`, `mcp_server/`, `conversation/`), each with a single
+capability and no cross-module reach-in beyond the shared
+`tools_interface` contract.
 
 ---
 
@@ -67,7 +80,8 @@ loop itself.
 addition (`mcp.md`), valuable for secondary non-voice clients, not core to
 initial build.
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — built as Milestone 11, after the voice
+MVP (Milestones 8–9) as planned. See #24 for the implementation record.
 
 ---
 
@@ -82,7 +96,10 @@ interruptions, function calling) — deliberately a different choice from
 Language-Lab's ElevenLabs, and explicitly a starting point for
 experimentation, not a permanent commitment (see decision #2).
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — built as Milestones 8–9, confirmed
+working for real voice conversations. Still the only provider integrated;
+evaluating a second one is Milestone 12, currently blocked on the user
+not having a second provider's API key.
 
 ---
 
@@ -96,7 +113,9 @@ logic.
 text-only conversations first (`roadmap.md`, steps 1–7) before adding
 voice (steps 8–9).
 
-**Status:** Proposed.
+**Status:** Decided (2026-08-11) — followed as built: Milestones 1–7 were
+all text-only, and the pedagogy gate (#19) was passed before voice work
+(Milestones 8–9) started, exactly as this decision required.
 
 ---
 
