@@ -802,3 +802,71 @@ object" pattern, "Grammar Precision — In progress") directly shaped its
 opening question.
 
 **Status:** Decided (2026-08-11).
+
+---
+
+## 24. Milestone 11: MCP server as a generic, thin transport layer over `tools_interface.TOOLS`
+
+**Context:** `mcp.md` scopes this milestone explicitly: "a thin transport
+layer over the same `tools.md` function contract, not a separate
+interface to design and maintain." The official `mcp` Python SDK is at
+major version **2.0.0** — my own recollection of its API (`FastMCP`,
+decorator-based registration) predates that major bump and was treated as
+unverified going in, the same discipline Milestone 8 used for the
+Realtime SDK. Checking the actually-installed source (not memory)
+confirmed there is no `FastMCP` in 2.0.0 at all: the real API is
+`mcp.server.MCPServer`, constructed with `name=`/`description=`, with an
+`add_tool(fn, name=, description=)` method that introspects a real
+callable's signature via `inspect.signature(fn, eval_str=True)` rather
+than taking an explicit JSON-schema parameter.
+
+**Decision:** `mcp_server/server.py` builds one `MCPServer` and registers
+all 18 `tools_interface.TOOLS` entries in a single generic loop over
+`TOOLS.items()` — not 18 hand-written wrappers. Each registered callable
+is a thin `wrapper(**kwargs) -> call_tool(name, **kwargs)`, routing every
+call through the existing, unmodified dispatcher. Per-tool special-casing
+would have violated `mcp.md`'s "no new logic" framing directly, so the
+loop being fully generic is the actual test of whether the design held,
+not just a style preference. All 18 tools — including the two still-stub
+functions (`retrieve_vocabulary`, `get_learning_statistics`) — are
+exposed identically; a client calling a stub gets a real
+`is_error=True` MCP result carrying the `NotImplementedError` message,
+not a silently faked success or a filtered-out tool list. Runs over
+**stdio** (`run(transport="stdio")`), the transport Claude Desktop/Code
+actually use for locally-configured servers, not the HTTP/SSE variant
+meant for remote servers.
+
+**Real bug found and fixed, not designed around in advance:** two tools
+(`summarize_skills_for_cv`, `analyze_job_fit`, from `career/service.py`)
+take an internal `_chat_fn` parameter — a leading-underscore test-injection
+hook that `tools_interface/registry.py`'s own schema generation already
+excludes. MCP's `func_metadata()` raises `InvalidSignature` on *any*
+leading-underscore parameter, rejecting the whole function outright. Fix:
+`_public_wrapper()` computes the handler's real signature via
+`inspect.signature(handler, eval_str=True)`, filters out
+underscore-prefixed parameters, and sets the plain `wrapper`'s
+`__signature__` attribute to the filtered result — `inspect.signature()`
+(and therefore MCP's own introspection) respects a manually-set
+`__signature__` directly. Applied uniformly to all 18 tools rather than
+special-cased to the 2 affected ones, keeping the registration loop
+generic.
+
+**Validated for real, not assumed:** two independent real-protocol paths,
+both via the SDK's own `ClientSession` (not a hand-rolled fake):
+(1) `InMemoryTransport` — real server + real client speaking the real MCP
+protocol over in-process streams, used for the offline pytest suite
+(`tests/test_mcp_server.py`): confirms all 18 tools list with matching
+descriptions, a real `search_notes` call against a synthetic vault
+round-trips correctly serialized data, and `get_learning_statistics`
+surfaces as a real MCP error, not a swallowed exception.
+(2) A genuine OS subprocess: `stdio_client` spawning the actual
+`uv run learning-os-mcp` entrypoint against the real vault
+(`~/Documents/Obsidian-Digital-Brain`) and the real `mistakes.db` —
+`search_notes("graph")` returned the real vault note, `get_recent_mistakes`
+returned real imported mistake data from `decisions.md` #23's Language-Lab
+import. This is the same DoD scenario `mcp.md` names ("what did I get
+wrong on graph algorithms last week," asked from outside the voice app),
+exercised end-to-end over the actual transport a secondary client would
+use, not simulated.
+
+**Status:** Decided (2026-08-11).

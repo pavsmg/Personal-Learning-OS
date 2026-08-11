@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.141.1",
+    "mcp>=2.0.0",
     "openai>=2.53.0",
     "pydantic-settings>=2.15.0",
     "pyyaml>=6.0.3",
@@ -20,6 +21,7 @@ learning-os-chat = "learning_os.conversation.loop:run"
 learning-os-career = "learning_os.career.cli:run"
 learning-os-voice = "learning_os.realtime.loop:run"
 learning-os-language-import = "learning_os.language.cli:run"
+learning-os-mcp = "learning_os.mcp_server.server:run"
 
 [build-system]
 requires = ["uv_build>=0.11.29,<0.12.0"]

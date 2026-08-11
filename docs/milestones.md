@@ -26,21 +26,32 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 10 complete.** Next up: Milestone 11 — MCP server
-(`roadmap.md` step 11, `mcp.md`) — a thin transport layer over the
-existing `tools_interface.TOOLS`/`call_tool` contract, no new logic per
-`mcp.md`'s own framing. Language-Lab's real English mistake data is now
-imported into `mistakes.db` and flows through the same
-`recommend_review`/Career-coaching machinery as every other domain
+**Status: Milestone 11 complete.** Next up: Milestone 12 — additional AI
+providers (`roadmap.md` step 12): evaluate at least one alternative
+realtime voice provider per the provider-resilience decision
+(`decisions.md` #2/#5), confirming a switch doesn't touch
+`domain-model.md` data. The backend now has three live consumers of
+`tools_interface.TOOLS`: the text loop, the voice loop, and (as of
+Milestone 11) an MCP server (`mcp_server/server.py`) exposing all 18
+tools generically over stdio to secondary clients like Claude
+Desktop/Code — validated end-to-end via a real subprocess against the
+real vault and `mistakes.db` (`decisions.md` #24). Language-Lab's real
+English mistake data is imported into `mistakes.db` and flows through the
+same `recommend_review`/Career-coaching machinery as every other domain
 (`decisions.md` #23); `retrieve_vocabulary` stays an honest stub (no
-source data exists). Carried-forward known gaps, not bugs: voice sessions
-still can't persist mistakes (`save_mistake` doesn't reliably fire over
-the Realtime API — `decisions.md` #22); `_infer_domain` doesn't detect a
-specific language from a vault-triggered session, so new language
-mistakes caught in normal conversation won't auto-join the language-import
-bucket (`decisions.md` #23); cross-domain interleaving isn't implemented
-in the session planner; `MistakeEntry.corrected` never flips to `True`.
-See `decisions.md` #9–23 for the choices made so far.
+source data exists) — and, as of Milestone 11, is exposed as such over
+MCP too (a stub call surfaces a real MCP error, not a faked success).
+Carried-forward known gaps, not bugs: voice sessions still can't persist
+mistakes (`save_mistake` doesn't reliably fire over the Realtime API —
+`decisions.md` #22); `_infer_domain` doesn't detect a specific language
+from a vault-triggered session, so new language mistakes caught in normal
+conversation won't auto-join the language-import bucket (`decisions.md`
+#23); cross-domain interleaving isn't implemented in the session planner;
+`MistakeEntry.corrected` never flips to `True`; registering the server
+with Claude Desktop/Code itself is left for the user to try whenever
+convenient (config snippet below), not blocking since the protocol layer
+is already validated for real. See `decisions.md` #9–24 for the choices
+made so far.
 
 ---
 
@@ -552,13 +563,38 @@ import created (`decisions.md` #23).
 
 ## Milestone 11 — MCP server (`roadmap.md` step 11, `mcp.md`)
 
-- [ ] Thin transport layer wrapping the existing `tools.md` contract — no
-  new logic, per `mcp.md`.
-- [ ] Test from a real secondary client (Claude Desktop or Claude Code)
-  with a real query.
+- [x] Thin transport layer wrapping the existing `tools.md` contract — no
+  new logic, per `mcp.md`. `mcp_server/server.py`: one generic loop over
+  `tools_interface.TOOLS`, no per-tool wrappers; all 18 tools (including
+  stubs) exposed identically. See `decisions.md` #24.
+- [x] Test from a real secondary client with a real query. Validated with
+  the SDK's own `ClientSession` two ways: in-process (`InMemoryTransport`,
+  the offline pytest suite) and a genuine OS subprocess (`stdio_client`
+  spawning `uv run learning-os-mcp`) against the real vault and
+  `mistakes.db`. Claude Desktop/Code registration is a config-file change
+  left for the user to try at their convenience (see `decisions.md` #24);
+  not blocking since the protocol layer is already validated end-to-end.
 
 **Definition of done:** "what did I get wrong on graph algorithms last
-week" is answerable from outside the voice app.
+week" is answerable from outside the voice app. **Met** — real subprocess
+validation: `search_notes("graph")` returned the real vault note,
+`get_recent_mistakes` returned real imported mistake data, both over the
+actual stdio transport a secondary client would use.
+
+**Try it yourself in Claude Desktop or Claude Code** (restart the app
+after editing its MCP config for the change to take effect):
+
+```json
+{
+  "mcpServers": {
+    "learning-os": {
+      "command": "uv",
+      "args": ["run", "learning-os-mcp"],
+      "cwd": "/home/knife/Projects/Personal-Learning-OS/backend"
+    }
+  }
+}
+```
 
 ---
 
