@@ -486,3 +486,78 @@ needed real implementations reading `mistakes/service.py`'s
   one-off special case for this parameter.
 
 **Status:** Decided (2026-08-10).
+
+---
+
+## 19. Pedagogy gate (per `roadmap.md`, before Milestone 8/voice): GO, with two logged non-blocking notes
+
+**Context:** `roadmap.md`/`pedagogy.md` both gate voice work (Milestone 8)
+on re-checking `pedagogy.md`'s realistic goals against everything built
+across Milestones 1–7 before sinking effort into realtime audio on top of
+a loop that hasn't been checked. Milestone 5's own pedagogy check-in
+already did a first-pass version of this (3–4 sessions, found and fixed one
+real correction-drift gap); this gate reviews more broadly across all ~7
+real sessions run since (M5–M7), asks for an explicit decision, not just
+another check-in note.
+
+**Review, against `pedagogy.md`'s four "realistic goals" criteria:**
+
+- **Does the agent actually test recall, not just discuss? — Yes,
+  consistently, across every real session run so far.** Every session
+  opened with a question, not a lecture. Real corrections observed:
+  `Adam optimizer` ("just faster gradient descent" → corrected with real
+  note wording, twice across M5 and M6 validation runs), `Turkish alphabet`
+  (three separate wrong claims corrected in-turn across two different real
+  runs, each grounded in the note's actual letter count/pronunciation
+  facts), `Gradient descent` ("always finds the global minimum" → corrected
+  immediately, *and* the session's closing explicitly circled back to that
+  exact shaky point before wrapping — rule 6, "revisit shaky concepts,"
+  working exactly as designed, not just as a hope). The one real gap found
+  (Milestone 5: a wrong claim hedged as "...right?" could slide by
+  uncorrected) was fixed in `prompt.py` and re-verified against the *same*
+  failing case, not just assumed fixed.
+- **Conceptual understanding, not overall competence — honored in what the
+  system actually outputs, not just in the docs.** Real
+  `summarize_skills_for_cv` output: "Demonstrated understanding of
+  optimizers *through tracked review*... *during tutoring sessions*" — not
+  "proficient in" or "experienced with." The scoping ADR #15 asked for
+  shows up in real generated text, not only in `domain-model.md`'s prose.
+- **Consistency over the baseline — not yet assessable, correctly not
+  being forced.** All real sessions so far are agent-run validation, not
+  longitudinal personal usage; `pedagogy.md` itself says this needs usage
+  history an MVP won't have yet. Nothing to report here is itself the
+  correct state at this stage — flagging it as still open, not silently
+  skipping it.
+- **Don't chase retention metrics prematurely — correctly not attempted.**
+  Validation stayed behavioral (is it testing recall) throughout, per
+  `pedagogy.md`'s own instruction.
+
+**Two non-blocking notes, logged rather than silently dropped:**
+
+1. **Cross-domain interleaving isn't actually implemented.**
+   `pedagogy.md`'s "Cross-domain breadth vs. depth" risk says interleaving
+   only helps "if the retrieval and planning layers actually mix domains
+   rather than defaulting to single-topic sessions" — checked against real
+   behavior, not assumed: `create_session("Gradient descent")` returns
+   `['Gradient descent', 'Adam optimizer', 'algorithm', 'ANN',
+   'backpropagation']` — every concept from the same neighborhood,
+   `related_notes`' 1-hop expansion never leaves the anchor's domain in
+   practice. `vision.md`'s cross-domain ambition and the current planner's
+   naive single-topic-anchor heuristic (Milestone 4, still a "v1, doesn't
+   need to be smart" implementation) don't match yet. Not a recall-testing
+   problem (that's solid, per above) and not something voice work makes
+   worse — a session-planner quality gap, worth a future backlog item
+   (interleave a second, unrelated domain's due-for-review concept into a
+   session rather than only expanding the anchor's own neighborhood), not
+   a blocker for Milestone 8.
+2. Carried forward from Milestones 6–7, unchanged: `MistakeEntry.corrected`
+   never flips `True`; `save_mistake`'s `domain` is model-supplied, not
+   backend-verified.
+
+**Decision: GO.** Text-only pedagogical foundation (recall-testing,
+honest scope, mistake-memory feedback loop) is solid enough, checked
+against real usage rather than assumed, to build Milestone 8's voice
+integration on top of. Neither non-blocking note above is a recall-testing
+defect — they're scoped, known limitations, not silently-accepted risk.
+
+**Status:** Decided (2026-08-11).

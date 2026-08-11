@@ -26,19 +26,19 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 7 complete.** Next up: Milestone 8 — OpenAI Realtime
-integration (voice, `roadmap.md` step 8). **Gate first**, per `roadmap.md`:
-re-check `pedagogy.md` before starting voice work — Milestones 5–6's
-pedagogy check-in already ran once (Milestone 5) and found/fixed one real
-gap; this is the point where `roadmap.md` asks to revisit that doc as a
-whole before sinking effort into realtime audio. `career/` is real
-(`summarize_skills_for_cv`/`analyze_job_fit`, `uv run learning-os-career`),
-validated against real tracked data including a real LLM call for both the
-empty-state and populated-strength paths. Known, deliberately-scoped gaps
-carried forward, not bugs: `MistakeEntry.corrected` never flips to `True`
-(nothing re-verifies a past mistake as resolved yet); `save_mistake`'s
-`domain` argument is model-supplied, not backend-verified. See
-`decisions.md` #9–18 for the choices made so far.
+**Status: Pedagogy gate passed (GO) — ready for Milestone 8.** Next up:
+Milestone 8, first task — OpenAI Realtime integration (voice,
+`roadmap.md` step 8). The gate (`decisions.md` #19) reviewed all ~7 real
+sessions across Milestones 5–7 against `pedagogy.md`'s realistic goals:
+recall-testing is consistently real, not just discussion, and the one gap
+Milestone 5 found was fixed and reverified. Two non-blocking notes carried
+into Milestone 8 and beyond, not bugs: cross-domain interleaving isn't
+actually implemented in the session planner yet (confirmed against real
+`create_session` output — a future backlog item, unrelated to voice
+specifically); `MistakeEntry.corrected` never flips to `True` (nothing
+re-verifies a past mistake as resolved yet); `save_mistake`'s `domain`
+argument is model-supplied, not backend-verified. See
+`decisions.md` #9–19 for the choices made so far.
 
 ---
 
@@ -384,10 +384,19 @@ fully offline. Real validation, in order:
 
 ## Gate — re-check `pedagogy.md` before voice (per `roadmap.md`)
 
-- [ ] Review all Milestone 5–6 session logs against `pedagogy.md`'s
-  realistic-goals criteria (consistency, actual recall-testing).
-- [ ] Explicit go / no-go / adjust-scope decision, logged in `decisions.md`
-  if it changes anything about the plan below.
+- [x] Reviewed all real session logs across Milestones 5–7 (~7 real
+  sessions, not just 5–6 as originally scoped — Milestone 7 also produced
+  real conversation data worth including) against `pedagogy.md`'s
+  realistic-goals criteria. Full review: `decisions.md` #19.
+- [x] Explicit decision, logged in `decisions.md` #19: **GO**. Recall-testing
+  is consistently real (corrections happen in-turn, grounded in actual
+  note content, including one gap found-and-fixed-and-reverified in
+  Milestone 5); conceptual-understanding scoping shows up in real generated
+  output, not just docs. Two non-blocking notes carried forward rather than
+  silently dropped: cross-domain interleaving isn't actually implemented in
+  the planner yet (confirmed against real behavior, not assumed — a
+  backlog item, not a blocker); `corrected`/`save_mistake` domain-trust
+  limitations from Milestones 6–7 still stand.
 
 ---
 
