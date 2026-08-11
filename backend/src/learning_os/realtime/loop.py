@@ -7,16 +7,14 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from learning_os.config import get_settings
-from learning_os.conversation.prompt import build_system_prompt
+from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
 from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
 from learning_os.realtime.session_log import SessionLog
 from learning_os.realtime.tools import to_realtime_tools
 from learning_os.serialization import serialize_for_json, to_json
-from learning_os.sessions import create_session
+from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionPlan
 from learning_os.tools_interface import call_tool
-
-REALTIME_TOOLS = ["search_notes", "get_note", "related_notes"]
 
 
 @lru_cache
@@ -48,7 +46,7 @@ def _session_config(plan: SessionPlan) -> dict[str, Any]:
                 "voice": get_settings().openai_realtime_voice,
             },
         },
-        "tools": to_realtime_tools(REALTIME_TOOLS),
+        "tools": to_realtime_tools(TUTORING_TOOLS),
     }
 
 
@@ -91,6 +89,7 @@ async def run_voice_session(topic: str | None = None) -> None:
                 elif event.type == "conversation.item.input_audio_transcription.completed":
                     print(f"You said: {event.transcript}")
                     log.write(f"USER: {event.transcript}")
+                    record_turn(plan.session_id, "user", event.transcript)
                 elif event.type == "response.output_audio_transcript.delta":
                     print(event.delta, end="", flush=True)
                     assistant_transcript.append(event.delta)
@@ -110,19 +109,25 @@ async def run_voice_session(topic: str | None = None) -> None:
                 elif event.type == "response.done":
                     response_in_progress = False
                     if assistant_transcript:
-                        log.write(f"ASSISTANT: {''.join(assistant_transcript)}")
+                        full_text = "".join(assistant_transcript)
+                        log.write(f"ASSISTANT: {full_text}")
+                        record_turn(plan.session_id, "assistant", full_text)
                         assistant_transcript.clear()
                     print()
                 elif event.type == "error":
                     print("API error:", event.error)
                     log.write(f"ERROR: {event.error}")
         finally:
-            log.write("SESSION END")
-            log.close()
             mic_task.cancel()
             await asyncio.gather(mic_task, return_exceptions=True)
             await speaker.stop()
             await unload_module(module_id)
+            finish_session(plan.session_id)
+            summary = summarize_session(plan.session_id)
+            print(f"\n--- {summary.summary} ---")
+            log.write(f"SUMMARY: {summary.summary}")
+            log.write("SESSION END")
+            log.close()
 
 
 def run() -> None:

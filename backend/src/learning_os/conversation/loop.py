@@ -2,14 +2,13 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from learning_os.conversation.prompt import build_system_prompt
+from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
 from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionSummary
 from learning_os.tools_interface import TOOLS, call_tool
 
-CONVERSATION_TOOLS = ["search_notes", "get_note", "related_notes", "save_mistake", "get_recent_mistakes"]
 END_SESSION_NUDGE = "[The learner wants to end the session now.]"
 QUIT_COMMANDS = {"quit", "exit", "done"}
 
@@ -37,7 +36,7 @@ class ConversationState:
 
 
 def _get_assistant_reply(messages: list[dict[str, Any]], chat_fn: ChatFn = chat_completion) -> str:
-    tools = to_openai_tools(CONVERSATION_TOOLS)
+    tools = to_openai_tools(TUTORING_TOOLS)
     while True:
         reply = chat_fn(messages, tools)
         if not reply.tool_calls:

@@ -671,3 +671,58 @@ not by deleting the `.env` file it was implicitly depending on the absence
 of.
 
 **Status:** Decided (2026-08-11).
+
+---
+
+## 22. Milestone 9: real voice parity confirmed for correction/planning; a genuine, evidence-based gap for mistake persistence, documented not silently accepted
+
+**Context:** Milestone 9 ported the rest of the text loop onto voice —
+`TUTORING_TOOLS` (shared with text, closing a drift risk where
+`realtime/loop.py`'s tool list had gone stale after Milestone 6 added
+`save_mistake`/`get_recent_mistakes` to text but not voice), `record_turn`
+transcript recording, and `finish_session`/`summarize_session` in the
+event loop's `finally` block. Deliberately did not replicate text's
+`END_SESSION_NUDGE` mechanic — no clean signal channel exists for it in
+voice without real added complexity, and it's not filling a real gap: the
+system prompt's rule 6 ("circle back to shaky concepts") already fires
+proactively, confirmed directly in real Milestone 6 transcripts before
+this milestone even started.
+
+**Real validation, 5 real sessions total (3 required + 2 diagnostic):**
+
+- **Full parity confirmed**: conversational mistake correction, 4/4 —
+  every deliberately wrong claim got caught and corrected in-turn,
+  grounded in real note content, matching text's behavior exactly.
+  Transcript recording → real `SessionSummary` output. Automatic mode
+  (`topic=None`) correctly called `recommend_review()` and picked
+  `Turkish alphabet` — the actual weakest tracked concept — confirming
+  Milestone 6's planner-feedback loop works identically when driven
+  through voice, not just text.
+- **Real gap found, not fixed, documented instead**: `save_mistake` never
+  fired — confirmed via direct SQLite row-count check (not assumed) across
+  **4 separate real attempts**: the original prompt, a substantially
+  strengthened "mandatory, not optional" rewrite of rule 3, and tested
+  against both `gpt-realtime-mini` and the full `gpt-realtime` model —
+  same null result every time. The same instructions reliably triggered
+  `save_mistake` via Chat Completions (text mode, Milestones 6–7). This
+  looks like a genuine Realtime-API characteristic — plausibly that
+  audio-generating models deprioritize "side-effect" tool calls (not
+  needed to answer the user in the moment) in favor of continuous spoken
+  flow — not something two targeted prompt/model fix attempts could
+  resolve. **User decision: document as a known, unresolved limitation
+  rather than pursue a backend-triggered heuristic nudge now** (uncertain
+  payoff against what may be a model-level tendency, more open-ended real
+  API cost). The strengthened rule 3 wording stays (a strictly clearer
+  instruction, harmless for text mode where it already worked, may help
+  future realtime model versions or real spoken-audio input rather than
+  the text-input validation substitute used here).
+
+**Practical consequence, stated plainly**: mistakes made and corrected in
+a real spoken session are *not* currently being persisted to
+`mistakes.db`, so they won't inform `recommend_review`/`estimate_mastery`
+the way a text session's mistakes do. Voice sessions today: real teaching
+loop, not yet a real memory loop. This is the concrete scope of "not full
+parity" — everything else checked out identical to text.
+
+**Status:** Decided (2026-08-11) — the persistence gap is open, tracked
+here and in `milestones.md`, not silently dropped.

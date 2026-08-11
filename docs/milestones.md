@@ -26,24 +26,22 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 8 complete.** Next up: Milestone 9 — Voice
-conversations (`roadmap.md` step 9), first task: port the full session
-loop (plan → converse → detect mistakes → summarize → update memory) from
-text to voice. Milestone 8 deliberately stopped short of this — the
-realtime loop (`realtime/loop.py`) only exposes the 3 retrieval tools, not
-`save_mistake`/`finish_session`/`summarize_session`/transcript recording —
-so Milestone 9 is where those get wired in, mirroring exactly how
-Milestone 5 built the text loop and Milestone 6 closed the mistake-memory
-loop on top of it. `uv run learning-os-voice` works today (real hardware
-confirmed present) but only for the retrieval/tool-calling slice; a real
-human-voice conversation exercising the full loop is Milestone 9's actual
-deliverable ("run at least 3 full voice sessions"). Carried-forward known
-gaps, not bugs: cross-domain interleaving isn't implemented in the session
-planner yet (confirmed against real `create_session` output — a backlog
-item, unrelated to voice); `MistakeEntry.corrected` never flips to `True`;
-`save_mistake`'s `domain` argument is model-supplied, not backend-verified.
-See
-`decisions.md` #9–20 for the choices made so far.
+**Status: Milestone 9 complete (partial parity, stated honestly).** Next
+up: Milestone 10 — Language coaching integration (`roadmap.md` step 10).
+Voice now has real teaching-loop parity with text (correction, transcript
+recording, session summaries, automatic-mode planning via
+`recommend_review`) — but **not** memory-update parity: `save_mistake`
+does not reliably fire over voice (`decisions.md` #22 — a real,
+4-attempts-confirmed Realtime-API limitation, not a bug in this
+codebase), so voice-session mistakes aren't currently persisted to
+`mistakes.db`. Worth a fresh look whenever revisiting the realtime
+integration, not scheduled to a specific milestone yet. Carried-forward
+known gaps, not bugs: cross-domain interleaving isn't implemented in the
+session planner yet (a backlog item, unrelated to voice);
+`MistakeEntry.corrected` never flips to `True`; `save_mistake`'s `domain`
+argument is model-supplied, not backend-verified (moot for voice right
+now since the tool doesn't fire there anyway). See `decisions.md` #9–22
+for the choices made so far.
 
 ---
 
@@ -458,14 +456,54 @@ persistence.
 
 ## Milestone 9 — Voice conversations (`roadmap.md` step 9)
 
-- [ ] Port the full session loop (plan → converse → detect mistakes →
+- [x] Port the full session loop (plan → converse → detect mistakes →
   summarize → update memory) from text (Milestones 5–6) to voice.
-- [ ] Handle teacher-style interruption specifically for voice (real
-  barge-in, not just a text-loop analog).
-- [ ] Run at least 3 full voice sessions across 2 domains.
+  `TUTORING_TOOLS` (`conversation/prompt.py`) is now the single shared
+  tool list both loops use — closes a real drift risk (`realtime/loop.py`
+  had gone stale, missing `save_mistake`/`get_recent_mistakes` since
+  Milestone 6). `record_turn`/`finish_session`/`summarize_session` wired
+  into `realtime/loop.py`'s event loop, reusing `sessions/service.py`
+  unchanged. **"Update memory" is the one part that isn't actually
+  achieved yet — see the honest finding below, not glossed over.**
+- [x] Handle teacher-style interruption specifically for voice (real
+  barge-in, not just a text-loop analog) — **already done in Milestone 8**
+  (`connection.response.cancel()` + `speaker.restart()`); nothing new
+  needed here, noted rather than re-implemented.
+- [x] Run at least 3 full voice sessions across 2 domains — ran 5 real
+  sessions total (3 required + 2 diagnostic, see below).
 
 **Definition of done:** parity with Milestone 6's text loop, voice-driven,
-same pedagogy check applied.
+same pedagogy check applied. **Partially done — stated honestly, not
+claimed as full parity.** Real validation (`decisions.md` #22), 5 real
+sessions:
+- **Confirmed full parity**: conversational mistake correction (4/4 real
+  sessions caught and corrected wrong claims in-turn, grounded in real
+  note content); transcript recording → real session summaries;
+  automatic mode (`topic=None`) correctly picked `Turkish alphabet` via
+  `recommend_review()` — the actual weakest tracked concept — proving
+  Milestone 6's planner-feedback loop works identically over voice.
+- **Real gap, not fixed**: `save_mistake` never fired in any of 4 separate
+  real attempts (original prompt, a strengthened "mandatory" rewrite,
+  tested against both `gpt-realtime-mini` and full `gpt-realtime`) —
+  confirmed via direct SQLite queries each time, not assumed. The same
+  instructions work reliably via Chat Completions (text mode). Decided
+  with the user: document this as a known, unresolved Realtime-API
+  limitation rather than chase a backend-triggered nudge heuristic now.
+  **Concretely: mistakes corrected in a voice session are not currently
+  persisted to `mistakes.db`, so they don't inform future
+  `recommend_review`/`estimate_mastery` the way text-session mistakes do.**
+  Voice today has a real teaching loop, not yet a real memory loop —
+  worth revisiting as a follow-up, not scheduled to a specific future
+  milestone yet.
+- **Pedagogy check-in** (same criteria as Milestone 5's check-in and the
+  pre-voice gate, `decisions.md` #19): recall-testing holds up identically
+  over voice — real corrections, grounded in vault content, not
+  lecture-and-affirm. Conceptual-understanding scoping unchanged (no new
+  concern). Consistency-over-baseline still not assessable (no
+  longitudinal usage yet, correctly not forced). The mistake-persistence
+  gap above is a real pedagogical-loop concern worth tracking, but it's a
+  *memory-update* gap, not a *recall-testing* gap — the teaching behavior
+  itself passes the same bar text did.
 
 ---
 

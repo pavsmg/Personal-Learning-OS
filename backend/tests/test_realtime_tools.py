@@ -1,3 +1,4 @@
+from learning_os.conversation.prompt import TUTORING_TOOLS
 from learning_os.realtime.tools import to_realtime_tools
 
 
@@ -17,3 +18,16 @@ def test_to_realtime_tools_preserves_real_parameters_schema():
     tools = to_realtime_tools(["get_note"])
 
     assert tools[0]["parameters"]["required"] == ["title"]
+
+
+def test_tutoring_tools_includes_mistake_memory_tools():
+    tools = to_realtime_tools(TUTORING_TOOLS)
+
+    names = {t["name"] for t in tools}
+    assert names == {
+        "search_notes",
+        "get_note",
+        "related_notes",
+        "save_mistake",
+        "get_recent_mistakes",
+    }

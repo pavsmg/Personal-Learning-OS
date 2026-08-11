@@ -5,7 +5,7 @@ review, and organize knowledge across an entire Obsidian vault — not a
 chatbot, a coach that knows the knowledge base, past mistakes, and
 progression over time.
 
-**Status: build in progress — Milestone 8 complete.** See
+**Status: build in progress — Milestone 9 complete.** See
 `docs/milestones.md` for exactly what's done and what's next. Start with
 `docs/vision.md` for what this is and why, and `docs/roadmap.md` for build
 order.
