@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from learning_os.config import get_settings
 from learning_os.conversation.prompt import build_system_prompt
 from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
+from learning_os.realtime.session_log import SessionLog
 from learning_os.realtime.tools import to_realtime_tools
 from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session
@@ -54,6 +55,9 @@ def _session_config(plan: SessionPlan) -> dict[str, Any]:
 async def run_voice_session(topic: str | None = None) -> None:
     plan = create_session(topic)
     client = _get_async_client()
+    log = SessionLog(plan.session_id)
+    log.write(f"SESSION START domain={plan.domain!r} objective={plan.objective!r} concepts={plan.concepts}")
+    print(f"(logging this session to {log.path})")
 
     async with client.realtime.connect(model=get_settings().openai_realtime_model) as connection:
         await connection.session.update(session=_session_config(plan))
@@ -62,6 +66,7 @@ async def run_voice_session(topic: str | None = None) -> None:
         speaker = Speaker()
         await speaker.start()
         response_in_progress = False
+        assistant_transcript: list[str] = []
 
         async def stream_microphone() -> None:
             async with Microphone() as mic:
@@ -85,24 +90,35 @@ async def run_voice_session(topic: str | None = None) -> None:
                     print("[thinking...]")
                 elif event.type == "conversation.item.input_audio_transcription.completed":
                     print(f"You said: {event.transcript}")
+                    log.write(f"USER: {event.transcript}")
                 elif event.type == "response.output_audio_transcript.delta":
                     print(event.delta, end="", flush=True)
+                    assistant_transcript.append(event.delta)
                 elif event.type == "response.created":
                     response_in_progress = True
                 elif event.type == "response.output_audio.delta":
                     await speaker.write(event.delta)
                 elif event.type == "response.function_call_arguments.done":
-                    output = await handle_tool_call(event.name, json.loads(event.arguments))
+                    arguments = json.loads(event.arguments)
+                    output = await handle_tool_call(event.name, arguments)
+                    print(f"\n[tool call] {event.name}({arguments}) -> {output[:200]}")
+                    log.write(f"TOOL CALL: {event.name}({arguments}) -> {output}")
                     await connection.conversation.item.create(
                         item={"type": "function_call_output", "call_id": event.call_id, "output": output}
                     )
                     await connection.response.create()
                 elif event.type == "response.done":
                     response_in_progress = False
+                    if assistant_transcript:
+                        log.write(f"ASSISTANT: {''.join(assistant_transcript)}")
+                        assistant_transcript.clear()
                     print()
                 elif event.type == "error":
                     print("API error:", event.error)
+                    log.write(f"ERROR: {event.error}")
         finally:
+            log.write("SESSION END")
+            log.close()
             mic_task.cancel()
             await asyncio.gather(mic_task, return_exceptions=True)
             await speaker.stop()

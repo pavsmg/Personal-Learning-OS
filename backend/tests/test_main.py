@@ -12,8 +12,13 @@ def test_root_reports_ok() -> None:
     assert response.json() == {"status": "ok", "service": "learning-os"}
 
 
-def test_health_reports_ok_without_config(monkeypatch) -> None:
+def test_health_reports_ok_without_config(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("VAULT_PATH", raising=False)
+    # A real backend/.env can exist on a dev machine (it does — see .env.example)
+    # and pydantic-settings reads that file directly, not just os.environ, so
+    # deleting the env var alone doesn't guarantee "no config source". Run from
+    # an empty directory so there's truly no .env to fall back to.
+    monkeypatch.chdir(tmp_path)
     from learning_os.config import get_settings
 
     get_settings.cache_clear()

@@ -445,6 +445,15 @@ completely (`pactl list` showed no leftover virtual devices afterward). A
 real human-voice round trip is Milestone 9's job, or `uv run
 learning-os-voice` right now since this machine has real audio hardware.
 
+**Follow-up after real use (`decisions.md` #21):** user tried
+`learning-os-voice` for real and found two real gaps — no `backend/.env`
+existed yet (fixed: created from `.env.example` with the real vault path),
+and no way to review a session's transcript or tool calls afterward (fixed:
+`realtime/session_log.py`'s `SessionLog` writes a per-session log to
+`logs/<session_id>.log`, and tool calls now print live too). Not part of
+Milestone 9's scope — this is a local convenience log, not domain-model
+persistence.
+
 ---
 
 ## Milestone 9 — Voice conversations (`roadmap.md` step 9)

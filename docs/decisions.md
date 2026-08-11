@@ -638,3 +638,36 @@ function-calling shape, handle voice/modalities/barge-in.
   docstring recommends `marin`/`cedar` for best quality).
 
 **Status:** Decided (2026-08-11).
+
+---
+
+## 21. Per-session transcript + tool-call log for the voice loop (follow-up to Milestone 8)
+
+**Context:** User actually ran `learning-os-voice` for real and asked
+whether there was any way to review a session's transcript or which tools
+got called — there wasn't. `realtime/loop.py` printed live status
+(`[listening...]`, spoken transcript deltas) but never recorded anything,
+and never printed tool-call activity at all (an oversight, not a documented
+scope decision, unlike transcript *persistence into the domain model*,
+which is genuinely Milestone 9's job).
+
+**Decision:** New `realtime/session_log.py`'s `SessionLog` — a plain-text,
+timestamped, per-session log at `logs/<session_id>.log` (relative,
+gitignored, mirrors `data/mistakes.db`'s convention), recording session
+start (domain/objective/concepts), each user/assistant turn, tool calls
+(name, arguments, full output), and errors. `realtime/loop.py` also now
+prints tool-call activity live, not just to the file. Explicitly **not**
+the same thing as Milestone 9's `record_turn`/`summarize_session` wiring —
+this is a local human-readable convenience log, not domain-model
+persistence; Milestone 9 still needs to do its own job when it lands.
+
+Side effect worth recording: creating a real `backend/.env` (to fix the
+user's `vault_path` config error) exposed a fragile test —
+`test_health_reports_ok_without_config` assumed no `.env` file existed on
+disk to prove the "no config" path, which broke the moment a real one did.
+Fixed by running that test from an empty `tmp_path` directory
+(`monkeypatch.chdir`) so it's isolated from real developer-machine state,
+not by deleting the `.env` file it was implicitly depending on the absence
+of.
+
+**Status:** Decided (2026-08-11).
