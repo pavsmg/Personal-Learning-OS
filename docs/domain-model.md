@@ -43,6 +43,21 @@ vault, including ones with no existing roadmap structure at all (math,
 physics, sport). A learner profile is the per-domain, per-concept mastery
 estimate this retrieval-and-tutoring loop reads and updates.
 
+What "mastery" honestly measures here is conceptual understanding, not
+overall competence: whether the learner can produce a concept's definition,
+mechanism, or distinction from a related idea on demand — not whether they
+can apply it under real, unscripted conditions (solve a novel problem,
+execute a skill, use a language spontaneously). See `pedagogy.md`'s
+"Realistic goals" for why conversational testing can support the former
+reliably but not the latter.
+
+The currently-implemented `MasteryEstimate` (`tools_interface/models.py`) is
+a single `mastery: float` per (domain, concept) — it doesn't yet distinguish
+conceptual from applied competence, and should be revisited before
+`estimate_mastery` (Milestone 6) is actually implemented against it, rather
+than building real planner logic around a schema that already overclaims
+what it measures.
+
 ## Session
 
 See `learning-engine.md` for the full session lifecycle. At the domain

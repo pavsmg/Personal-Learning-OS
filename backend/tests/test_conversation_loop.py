@@ -63,6 +63,45 @@ def test_send_message_resolves_tool_call_before_returning_reply(tmp_path, monkey
     assert result[0]["title"] == "Optimizer"
 
 
+def test_send_message_resolves_save_mistake_tool_call(tmp_path, monkeypatch):
+    write_vault(tmp_path, {"Gradient descent.md": "---\ndomain: classical-ml\n---\ncore optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    chat = ScriptedChat(
+        [
+            LLMReply(content="Opening.", tool_calls=[]),
+            LLMReply(
+                content=None,
+                tool_calls=[
+                    ToolCallRequest(
+                        id="call_1",
+                        name="save_mistake",
+                        arguments={
+                            "concept": "Gradient descent",
+                            "explanation": "thought it maximizes loss",
+                            "category": "conceptual",
+                            "severity": "minor",
+                            "confidence": 0.7,
+                            "domain": "classical-ml",
+                        },
+                    )
+                ],
+            ),
+            LLMReply(content="Got it, noted — let's try again.", tool_calls=[]),
+        ]
+    )
+    state, _ = start_session("gradient descent", chat_fn=chat)
+
+    reply = send_message(state, "Gradient descent maximizes the loss, right?", chat_fn=chat)
+
+    assert reply == "Got it, noted — let's try again."
+    from learning_os.mistakes.service import get_recent_mistakes
+
+    saved = get_recent_mistakes(domain="classical-ml")
+    assert len(saved) == 1
+    assert saved[0].concept == "Gradient descent"
+
+
 def test_end_session_sends_nudge_then_finishes_and_summarizes(tmp_path, monkeypatch):
     write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))

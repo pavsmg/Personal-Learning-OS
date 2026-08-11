@@ -67,7 +67,13 @@ The mechanisms with real evidence behind them, relevant to this project:
   concepts" design is the right instinct here, but only holds if the agent
   is actually implemented to test recall and production, not just to
   discuss and affirm — a design intent right now, not something built and
-  verified yet.
+  verified yet. Resolved into a concrete scope decision under "Realistic
+  goals" below: the system claims to verify conceptual understanding of
+  fundamentals, explicitly not overall competence — even that narrower claim
+  isn't bulletproof (recited definitions can outrun real understanding of
+  the mechanism behind them — the "illusion of explanatory depth"), which is
+  exactly why interrupt-and-probe still matters rather than accepting a
+  fluent answer at face value.
 - **Cross-domain breadth vs. depth.** Interleaving helps *within* related
   material (e.g. mixed algorithm problem types) more reliably than it helps
   across unrelated domains in the same sitting (algorithms, then Turkish
@@ -94,6 +100,16 @@ Given the above, the honest goal for a first build isn't "prove this
 improves learning outcomes" — that needs longitudinal data this project
 won't have early on. A more realistic bar:
 
+- **Conceptual understanding, not overall competence.** What a conversation
+  can actually verify is whether the learner can produce a topic's
+  foundational concepts on demand — definitions, mechanisms, how one idea
+  differs from a related one — not whether they're skilled at applying it
+  under real, unscripted conditions (solving a novel problem, executing a
+  physical skill, using a language spontaneously). Conflating the two
+  overclaims what conversational testing proves. Every "mastery"/"level"
+  signal this system reports should be scoped to the former and should not
+  imply the latter — this is the concrete resolution to the illusion-of-
+  competence risk below, not just a flagged concern.
 - **Consistency over the baseline.** Does having this available increase
   actual session frequency/consistency compared to current habits (ad hoc
   note review, occasional Language-Lab sessions)? This is measurable early

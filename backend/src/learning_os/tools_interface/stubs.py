@@ -1,25 +1,13 @@
 from typing import Any
 
-from learning_os.tools_interface.models import JobFitAnalysis, MasteryEstimate
+from learning_os.tools_interface.models import JobFitAnalysis
 
-# Progression, Language module, Stats, and Career don't have a dedicated
-# module folder yet (unlike retrieval/mistakes/sessions) — these stubs live
-# here provisionally until their own milestone gives them one.
-
-
-def get_learning_profile(domain: str) -> list[MasteryEstimate]:
-    """Stub — implemented in Milestone 6."""
-    raise NotImplementedError("get_learning_profile is not implemented yet (Milestone 6)")
-
-
-def estimate_mastery(domain: str, concept: str) -> float:
-    """Stub — implemented in Milestone 6."""
-    raise NotImplementedError("estimate_mastery is not implemented yet (Milestone 6)")
-
-
-def recommend_review(domain: str | None = None) -> list[str]:
-    """Stub — implemented in Milestone 6."""
-    raise NotImplementedError("recommend_review is not implemented yet (Milestone 6)")
+# Language module, Stats, and Career don't have a dedicated module folder
+# yet (unlike retrieval/mistakes/sessions) — these stubs live here
+# provisionally until their own milestone gives them one. Progression
+# (get_learning_profile/estimate_mastery/recommend_review) used to live
+# here too but moved into mistakes/service.py at Milestone 6, since it's
+# entirely computed from mistake data.
 
 
 def get_language_profile(language: str) -> dict[str, Any]:

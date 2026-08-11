@@ -11,8 +11,11 @@ vault. See `docs/vision.md` for the full picture.
 
 ## Current state
 
-**Docs-only, nothing built.** This repo currently contains only the
-architecture handbook in `docs/` — no source code yet. `docs/roadmap.md`
+**Build in progress — Milestone 6 of the roadmap complete.** The backend
+(`backend/`, Python + FastAPI) implements the tool registry, retrieval, a
+pedagogy-checked text-only conversation loop against a real LLM, and real
+SQLite-backed mistake memory feeding back into the session planner;
+Career/CV coaching (Milestone 7) is next. `docs/roadmap.md`
 has the intended build order; `docs/milestones.md` breaks that into
 checkable tasks and tracks exactly where things stand — check its "Where to
 resume" section at the start of a session, and update it at the end of one,

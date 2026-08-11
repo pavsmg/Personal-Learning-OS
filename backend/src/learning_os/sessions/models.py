@@ -5,6 +5,7 @@ class SessionPlan(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     session_id: str
+    domain: str
     objective: str
     concepts: list[str]
     target_difficulty: str

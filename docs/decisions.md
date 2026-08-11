@@ -275,3 +275,134 @@ to the model during conversation; `create_session`/`finish_session`/
 model-callable tools, so session lifecycle stays a backend decision.
 
 **Status:** Decided (2026-08-10).
+
+---
+
+## 15. Mastery scope narrowed to conceptual understanding, not overall competence
+
+**Context:** `pedagogy.md`'s "Illusion of competence from conversational
+fluency" risk (conversational fluency is a bad proxy for durable/applied
+learning) was flagged but never resolved into a concrete, honestly-scoped
+goal — `vision.md`'s "current level per domain" language and the single
+`mastery: float` field on `MasteryEstimate` (`tools_interface/models.py`)
+both implicitly claimed to assess overall competence, which conversational
+testing can't reliably do.
+
+**Decision:** Recalibrate the system's stated goal across `pedagogy.md`,
+`vision.md`, and `domain-model.md`: what conversational testing honestly
+verifies is conceptual/declarative understanding (definitions, mechanisms,
+distinctions between related ideas), not applied/practical competence
+(solving novel problems, executing a skill under real conditions). Docs
+updated to state this explicitly rather than leaving the risk flagged but
+unaddressed. Code implication, not yet acted on: `MasteryEstimate.mastery:
+float` is a single blended score and doesn't reflect this distinction —
+flagged in `domain-model.md` as something to resolve before `estimate_mastery`
+(Milestone 6) is actually implemented, rather than changing the schema now
+ahead of a real consumer (the session planner) that should drive its
+final shape.
+
+**Status:** Decided (2026-08-10).
+
+---
+
+## 16. Session planner formalized as two explicit modes: automatic proposal vs. learner-directed topic
+
+**Context:** `learning-engine.md` described the planner as if it always
+decides the session unilaterally ("a planner decides the day's
+objective..."), but the actually-implemented `create_session(topic: str,
+...)` (Milestone 4, done) requires a topic — the reverse gap: docs implied
+fully automatic, code only supports learner-directed. User asked to make
+both paths explicit: the planner can either propose a session automatically
+or build one around a topic the learner names.
+
+**Decision:** `learning-engine.md` now documents two explicit modes,
+automatic and learner-directed, both producing the same `SessionPlan` and
+entering the same conversation flow — the difference is only in how the
+objective/concepts get selected. Mode selection is a backend/orchestration
+choice made before the conversation starts, consistent with `create_session`
+being backend-orchestrated rather than model-callable (#14). Code
+implication for Milestone 6: `create_session`'s `topic` parameter becomes
+optional (`topic: str | None = None`), falling back to `recommend_review`'s
+picks when omitted — added as an explicit sub-task under Milestone 6 in
+`milestones.md` rather than left implicit inside "wire recommend_review back
+into the planner."
+
+**Status:** Decided (2026-08-10).
+
+---
+
+## 17. Milestone 6: SQLite persistence, resolved schemas, and where Progression logic lives
+
+**Context:** Milestone 6 needed to turn `save_mistake`/`search_mistakes`/
+`get_recent_mistakes`/`get_learning_profile`/`estimate_mastery`/
+`recommend_review` from stubs into real logic, and two things #15/#16 had
+flagged but not yet acted on needed resolving in the process, not deferred
+again.
+
+**Decisions:**
+- **Persistence:** real SQLite via stdlib `sqlite3` (no new dependency),
+  fulfilling #10 for mistake data specifically — decided now rather than
+  keeping mistakes in-memory (Milestone 5's precedent for sessions) because
+  the DoD ("a mistake made in one session visibly changes what the next
+  session's planner chooses to review") only means something if it survives
+  past a single process, and #10 already committed to SQLite for exactly
+  this data two milestones ago. `mistakes/store.py`; `Settings.db_path`
+  (default `data/mistakes.db`, already covered by the existing `*.db`
+  gitignore entry). Connections are opened fresh per call, not cached — no
+  new cache-clearing needed in `conftest.py`.
+- **`MistakeEntry` gains `domain: str`** (`mistakes/models.py`) — missing
+  before despite `get_recent_mistakes`/`get_learning_profile`/
+  `estimate_mastery` all needing to filter/group by it. Inferred once per
+  session, server-side, not asked of the model as a free guess: anchor
+  note's frontmatter `domain:` → its first vault tag → `"general"`. Same
+  inference now also sets the new `SessionPlan.domain` field
+  (`sessions/models.py`).
+- **`MasteryEstimate` resolved per #15's flag**: `mastery: float` renamed to
+  `conceptual_understanding: float`, plus a new `mistake_count: int`. The
+  count is the actual fix, not the rename alone — a `1.0` with
+  `mistake_count=0` is machine-readably "no signal yet," not "proven solid."
+  Formula: `1.0 - average(confidence of recorded mistakes for that
+  concept)`, clamped `[0, 1]`, defaulting to `1.0` with zero mistakes
+  (documented limitation: this conflates "never tested" with "solid,"
+  inherent to a mistake-only memory model per `domain-model.md`'s own
+  framing — not something this milestone can fully solve, only state
+  honestly). `MasteryEstimate` itself moved from `tools_interface/models.py`
+  into `mistakes/models.py` (see below — avoids a circular import, and it's
+  mistake-derived data anyway).
+- **Progression functions moved into `mistakes/service.py`**, out of
+  `tools_interface/stubs.py` — corrects part of #13's "provisional...
+  pending their own module" placement. They're entirely computed from
+  mistake data, so once that data is real, co-locating the computation with
+  it is simpler than inventing a separate module. (This move is also what
+  necessitated moving `MasteryEstimate` alongside them: `mistakes/service.py`
+  needs it, and `mistakes` importing from `tools_interface` while
+  `tools_interface/__init__.py` imports from `mistakes` would be a real
+  circular import, not just an style preference.)
+- **`corrected` stays `False` at save time.** It means "the learner has
+  since demonstrated they understand this," not "the tutor explained the
+  right answer" — the latter happens for every saved mistake by design,
+  which would make the field meaningless if it defaulted `True`. Nothing in
+  this milestone re-verifies and flips it; that's a real, explicitly scoped
+  gap for a future milestone (some "confirm previously-flagged concept is
+  now solid" mechanism), not a bug.
+- **`save_mistake`'s `domain` argument is model-supplied**, guided by the
+  system prompt to echo the session's actual domain, not backend-injected.
+  Backend-injecting it would need session-context-aware tool dispatch,
+  which `tools_interface.call_tool`'s generic `handler(**kwargs)` dispatch
+  doesn't support today and no other tool needs yet — worth building if a
+  second real need appears, not speculatively now. Worst case of trusting
+  the model here is a slightly-off domain string on one entry: low-stakes,
+  correctable later.
+- **`CONVERSATION_TOOLS`** (`conversation/loop.py`) gains `save_mistake`
+  (required — this is the actual detection-wiring) and
+  `get_recent_mistakes` (lets the model check a domain's known gaps at
+  session start, strengthening the existing "revisit shaky concepts" prompt
+  rule with real persisted data instead of only in-conversation memory).
+
+**Validated end-to-end with real data**, not just unit tests: one real
+session flagged and saved a genuine `Adam optimizer` mistake (confirmed by
+querying the live SQLite DB directly, not assumed); `create_session(topic=None)`
+immediately afterward proposed that exact concept as the day's session. See
+`milestones.md` Milestone 6 for the full transcript excerpt.
+
+**Status:** Decided (2026-08-10).

@@ -9,7 +9,7 @@ from learning_os.sessions import create_session, finish_session, record_turn, su
 from learning_os.sessions.models import SessionSummary
 from learning_os.tools_interface import call_tool
 
-CONVERSATION_TOOLS = ["search_notes", "get_note", "related_notes"]
+CONVERSATION_TOOLS = ["search_notes", "get_note", "related_notes", "save_mistake", "get_recent_mistakes"]
 END_SESSION_NUDGE = "[The learner wants to end the session now.]"
 QUIT_COMMANDS = {"quit", "exit", "done"}
 
@@ -65,7 +65,7 @@ def _dumps(value: Any) -> str:
     return json.dumps(value)
 
 
-def start_session(topic: str, chat_fn: ChatFn = chat_completion) -> tuple[ConversationState, str]:
+def start_session(topic: str | None = None, chat_fn: ChatFn = chat_completion) -> tuple[ConversationState, str]:
     plan = create_session(topic)
     messages = [{"role": "system", "content": build_system_prompt(plan)}]
     opening = _get_assistant_reply(messages, chat_fn)
@@ -90,7 +90,10 @@ def end_session(state: ConversationState, chat_fn: ChatFn = chat_completion) -> 
 
 
 def run() -> None:
-    topic = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else input("What do you want to study today? ")
+    if len(sys.argv) > 1:
+        topic = " ".join(sys.argv[1:])
+    else:
+        topic = input("What do you want to study today? (leave blank to let it pick) ").strip() or None
     state, opening = start_session(topic)
     print(f"\n{opening}\n")
 

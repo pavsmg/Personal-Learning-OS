@@ -66,3 +66,10 @@ def test_recommend_review_schema_optional_domain_not_required():
     schema = TOOLS["recommend_review"].parameters_schema
 
     assert "required" not in schema or "domain" not in schema["required"]
+
+
+def test_save_mistake_schema_requires_domain():
+    schema = TOOLS["save_mistake"].parameters_schema
+
+    assert "domain" in schema["required"]
+    assert schema["properties"]["domain"]["type"] == "string"

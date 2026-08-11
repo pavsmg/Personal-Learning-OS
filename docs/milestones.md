@@ -26,21 +26,18 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 5 complete.** Next up: Milestone 6, first task
-("Implement `save_mistake`/`search_mistakes`/`get_recent_mistakes` against
-the schema in `domain-model.md`"). The text conversation loop is real and
-pedagogy-checked (`conversation/` package); mistake data still doesn't
-exist anywhere — `mistakes/service.py`'s three functions still raise
-`NotImplementedError`, and closing that loop (wiring mistake detection into
-the conversation, then `recommend_review`/`estimate_mastery` back into the
-planner) is exactly Milestone 6's job. Also worth revisiting once Milestone
-6 lands: right now nothing in the conversation loop actually calls
-`save_mistake` when the agent catches an error — Milestone 5 only built the
-*conversational* correction behavior (verified in the pedagogy check-in
-below), not the *persistence* of those corrections as mistake entries; that
-wiring is Milestone 6's "wire mistake detection into Milestone 5's loop"
-task, not something this milestone was scoped to do. See `decisions.md`
-#9–14 for the choices made so far.
+**Status: Milestone 6 complete.** Next up: Milestone 7 — Career/CV coaching
+(`summarize_skills_for_cv`/`analyze_job_fit`, still stubs in
+`tools_interface/stubs.py`), which now has real mastery data to read: call
+`get_learning_profile(domain)` (`mistakes/service.py`) instead of guessing
+at how to source "current strengths." Mistake memory is real and persisted
+(SQLite, `backend/data/mistakes.db`, gitignored) and the planner closes the
+loop for real — see Milestone 6's Definition of Done below for the actual
+end-to-end proof. Known, deliberately-scoped gaps carried forward, not
+bugs: `MistakeEntry.corrected` never flips to `True` (nothing re-verifies a
+past mistake as resolved yet); `save_mistake`'s `domain` argument is
+model-supplied, not backend-verified. See `decisions.md` #9–17 for the
+choices made so far.
 
 ---
 
@@ -285,17 +282,49 @@ documented.
 
 ## Milestone 6 — Mistake-memory updates (`roadmap.md` step 6, `domain-model.md`)
 
-- [ ] Implement `save_mistake` / `search_mistakes` / `get_recent_mistakes`
-  against the schema in `domain-model.md`.
-- [ ] Wire mistake detection into Milestone 5's loop — when the agent flags
+- [x] Implement `save_mistake` / `search_mistakes` / `get_recent_mistakes`
+  against the schema in `domain-model.md`: real SQLite persistence
+  (`mistakes/store.py`, stdlib `sqlite3`, fulfilling `decisions.md` #10),
+  `MistakeEntry` gained a `domain: str` field it was missing
+  (`decisions.md` #17).
+- [x] Wire mistake detection into Milestone 5's loop — when the agent flags
   an error mid-conversation, it gets saved, not just mentioned.
-- [ ] Wire `recommend_review` / `estimate_mastery` (reading saved mistakes)
-  back into Milestone 4's planner — this closes the loop.
-- [ ] Verify the loop closes for real: a mistake made in one session
+  `conversation/loop.py`'s `CONVERSATION_TOOLS` now includes `save_mistake`
+  (and `get_recent_mistakes`, so the model can check known gaps at session
+  start); `prompt.py` instructs the model to call it on every correction,
+  using the session's real (server-inferred) domain.
+- [x] Wire `recommend_review` / `estimate_mastery` (reading saved mistakes)
+  back into Milestone 4's planner — `create_session(topic: str | None =
+  None)`: omitted topic now falls back to `recommend_review()`'s top pick,
+  raising `ValueError` if nothing's recommended yet (the realistic state
+  right after this shipped, before real usage accumulates). Both functions
+  — plus `get_learning_profile` — moved from `tools_interface/stubs.py`
+  into `mistakes/service.py` since they're entirely mistake-data-derived
+  (`decisions.md` #17). `MasteryEstimate.mastery` renamed to
+  `conceptual_understanding` + a new `mistake_count` field, resolving the
+  scope-honesty gap `decisions.md` #15 had flagged but not yet acted on.
+- [x] Verify the loop closes for real: a mistake made in one session
   visibly changes what the next session's planner chooses to review.
+  Verified with real data, not just unit tests (see below).
 
 **Definition of done:** the mistake-memory → planner feedback loop is
-demonstrably closed, not just each half built in isolation.
+demonstrably closed, not just each half built in isolation. **Done** —
+`uv run pytest` passes 85 tests, fully offline. Real end-to-end run: a
+session on `Adam optimizer` (domain `classical-ml`) got the deliberately
+wrong claim "Adam is basically just gradient descent but faster, right?",
+corrected it immediately per the Milestone 5 pedagogy rules, and called
+`save_mistake` — confirmed by querying the live SQLite DB directly
+afterward (not assumed):
+```
+classical-ml|Adam optimizer|Described Adam as 'basically just gradient
+descent but faster.' The note says Adam is a smarter version of gradient
+descent with memory of past descent (momentum) and an adaptive learning
+rate, not merely generic faster gradient descent.|conceptual confusion|medium|0.93
+```
+Immediately afterward, `create_session(topic=None)` — automatic mode —
+proposed exactly that concept: `objective="Review Adam optimizer (due for
+review) and related concepts"`, `domain="classical-ml"`. The loop closes
+with real data, not a synthetic fixture.
 
 ---
 
