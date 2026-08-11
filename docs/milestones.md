@@ -26,18 +26,19 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 6 complete.** Next up: Milestone 7 — Career/CV coaching
-(`summarize_skills_for_cv`/`analyze_job_fit`, still stubs in
-`tools_interface/stubs.py`), which now has real mastery data to read: call
-`get_learning_profile(domain)` (`mistakes/service.py`) instead of guessing
-at how to source "current strengths." Mistake memory is real and persisted
-(SQLite, `backend/data/mistakes.db`, gitignored) and the planner closes the
-loop for real — see Milestone 6's Definition of Done below for the actual
-end-to-end proof. Known, deliberately-scoped gaps carried forward, not
-bugs: `MistakeEntry.corrected` never flips to `True` (nothing re-verifies a
-past mistake as resolved yet); `save_mistake`'s `domain` argument is
-model-supplied, not backend-verified. See `decisions.md` #9–17 for the
-choices made so far.
+**Status: Milestone 7 complete.** Next up: Milestone 8 — OpenAI Realtime
+integration (voice, `roadmap.md` step 8). **Gate first**, per `roadmap.md`:
+re-check `pedagogy.md` before starting voice work — Milestones 5–6's
+pedagogy check-in already ran once (Milestone 5) and found/fixed one real
+gap; this is the point where `roadmap.md` asks to revisit that doc as a
+whole before sinking effort into realtime audio. `career/` is real
+(`summarize_skills_for_cv`/`analyze_job_fit`, `uv run learning-os-career`),
+validated against real tracked data including a real LLM call for both the
+empty-state and populated-strength paths. Known, deliberately-scoped gaps
+carried forward, not bugs: `MistakeEntry.corrected` never flips to `True`
+(nothing re-verifies a past mistake as resolved yet); `save_mistake`'s
+`domain` argument is model-supplied, not backend-verified. See
+`decisions.md` #9–18 for the choices made so far.
 
 ---
 
@@ -331,22 +332,53 @@ with real data, not a synthetic fixture.
 ## Milestone 7 — Career/CV coaching (`roadmap.md` step 7, `tools.md`'s
 Career functions)
 
-- [ ] Implement `summarize_skills_for_cv` — read the learner profile
-  (`domain-model.md`) and produce a CV-ready summary of actual technical
-  strengths (e.g. database knowledge), grounded in tracked mastery rather
-  than self-reported skill level.
-- [ ] Implement `analyze_job_fit` — take a target job description as input,
-  compare its stated requirements against the learner profile, and return
-  two things: which tracked strengths to foreground for that role, and
-  which required skills are gaps not yet covered by the profile.
-- [ ] Validate against at least one real job description and confirm the
-  gap list matches what the user already knows they're weak on — this is a
-  read-only feature on top of existing data, not a new tracking mechanism,
-  so it needs no schema changes to `domain-model.md`.
+- [x] Implement `summarize_skills_for_cv` — read the learner profile
+  (`domain-model.md`, `mistakes/service.py`'s `get_learning_profile`,
+  now domain-optional per `decisions.md` #18) and produce a CV-ready
+  summary of actual technical strengths, grounded in tracked mastery rather
+  than self-reported skill level. Filters to concepts with
+  `mistake_count > 0` and `conceptual_understanding >= 0.7`; returns an
+  honest "not enough tracked history" message rather than fabricating
+  content when nothing qualifies (real behavior when run against only the
+  session's genuine, high-confidence mistakes — see below).
+- [x] Implement `analyze_job_fit` — take a target job description as input,
+  compare its stated requirements against the learner profile via a real
+  LLM call (semantic matching against free-form prose, unlike Milestone
+  5's naive substring-based `summarize_session` — `decisions.md` #18
+  explains why the same "keep it naive" precedent didn't apply here), and
+  return matching strengths / gaps.
+- [x] Validated against a real (synthetic, per this session's decision) job
+  description — see the real transcript below. New `career/` module
+  (`models.py`/`prompt.py`/`service.py`/`cli.py`, `uv run
+  learning-os-career`), following Milestone 6's exact precedent: implement
+  for real, move out of `tools_interface/stubs.py`.
 
 **Definition of done:** given a real job posting, the assistant produces a
 CV skills summary and an honest gap list, both grounded in real mastery
-data rather than guesswork.
+data rather than guesswork. **Done** — `uv run pytest` passes 94 tests,
+fully offline. Real validation, in order:
+1. Enriched the real profile with 2 more live conversation sessions
+   (`Turkish alphabet`, `Gradient descent`), each with a deliberate mistake
+   — real `mistakes.db` then held 3 domains (`classical-ml`, `languages`,
+   `math-foundations`), all genuine high-confidence corrections.
+2. `summarize_skills_for_cv()` against just that real data returned the
+   honest empty-state message — *none* of the 3 crossed the strength
+   threshold, correctly, since they were real, confidently-flagged
+   mistakes, not solid concepts.
+3. Added one more entry directly (confidence 0.15, simulating a minor
+   slip) to also exercise the populated path against a real LLM call:
+   > "**Classical ML:** Demonstrated understanding of **optimizers**
+   > through tracked review, with solid conceptual grasp (**0.85**
+   > understanding) and limited errors (**1** mistake) during tutoring
+   > sessions."
+4. `analyze_job_fit()` against a synthetic junior-ML-engineer posting
+   (gradient-based optimization, neural net training, Kubernetes, SQL,
+   multilingual/localization) correctly returned `Optimizer` as the one
+   matching strength and folded `Gradient descent`/`Adam optimizer`/
+   `Turkish` — all real tracked entries, but weak — into the gap
+   description alongside genuinely untracked skills (Kubernetes, SQL) —
+   distinguishing "topic touched" from "topic mastered" rather than
+   forcing a false match on topical overlap alone.
 
 ---
 

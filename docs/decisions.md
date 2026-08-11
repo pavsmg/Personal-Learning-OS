@@ -406,3 +406,83 @@ immediately afterward proposed that exact concept as the day's session. See
 `milestones.md` Milestone 6 for the full transcript excerpt.
 
 **Status:** Decided (2026-08-10).
+
+---
+
+## 18. Milestone 7: Career functions read the whole profile, use the LLM for semantic matching, and their own module
+
+**Context:** `summarize_skills_for_cv()`/`analyze_job_fit(job_description)`
+needed real implementations reading `mistakes/service.py`'s
+`get_learning_profile`.
+
+**Decisions:**
+- **`get_learning_profile`'s `domain` param made optional**
+  (`domain: str | None = None`), consistent with `get_recent_mistakes`/
+  `recommend_review`'s existing pattern — `None` means all domains, grouped
+  by `(domain, concept)` rather than just `concept` (a concept name could
+  in principle repeat across domains, e.g. "Overfitting" in both
+  classical-ml and statistics — group correctly rather than assume
+  uniqueness).
+- **Stated plainly, not discovered-and-hidden:** the mistake-only memory
+  model means `get_learning_profile` can only surface concepts with at
+  least one recorded mistake — a concept never gotten wrong is invisible to
+  it entirely. `summarize_skills_for_cv` therefore can't claim to be a
+  comprehensive skill inventory; it describes *concepts tested and shown
+  solid understanding of*, and says so explicitly in its own output when
+  coverage is thin (empty-strengths case), continuing #15's honesty
+  standard. **Confirmed against real usage, not just reasoned about in the
+  abstract:** all 3 mistakes produced by real conversation sessions came
+  back high-confidence (correctly — they were genuine, clear errors), so
+  *none* crossed the 0.7 strength threshold from live conversation data
+  alone — `summarize_skills_for_cv()` correctly returned its honest
+  no-data message against real data before any strength existed. A fourth
+  entry was added directly (not conversation-triggered) with a
+  deliberately low confidence (0.15, simulating a minor/trivial slip) to
+  also exercise and confirm the populated-strengths path against a real
+  LLM call, which returned appropriately scoped CV language ("demonstrated
+  understanding of optimizers through tracked review... during tutoring
+  sessions" — not overclaiming production experience).
+- **Both functions call the LLM** (`llm_client.chat_completion`, extended
+  with an optional `tool_choice` param for `analyze_job_fit`'s forced
+  structured output) — unlike Milestone 5's `summarize_session`, which
+  deliberately stayed naive/non-LLM because it only needed literal
+  substring matching against a small known concept list. Matching a job
+  posting's free-form prose against tracked concepts is a genuinely
+  different, open-ended semantic task naive keyword matching would do
+  badly at; recognizing that difference (rather than applying the same
+  "keep it naive" precedent everywhere by default) is the actual judgment
+  call here. **Confirmed against a real posting**: the model correctly
+  distinguished "topic touched but weak" (`Gradient descent`, `Adam
+  optimizer`, `Turkish alphabet` — all real tracked entries with low
+  conceptual_understanding) from "topic touched and strong" (`Optimizer`),
+  folding the former into the gap description rather than forcing a false
+  strength match — not hallucinated relevance.
+- **New `career/` module** (`models.py`/`prompt.py`/`service.py`/`cli.py`),
+  following Milestone 6's exact precedent for Progression: implement for
+  real, move out of `tools_interface/stubs.py` into a real module.
+  `JobFitAnalysis` moved from `tools_interface/models.py` into
+  `career/models.py` (that file is now deleted — it held nothing else).
+- **Structural fix, not an import-order workaround:** `llm_client.py`
+  moved from `conversation/` to top-level `learning_os/llm_client.py`.
+  `career/service.py` needing `chat_completion` created a real cycle
+  (`tools_interface` → `career` → `conversation` (via `llm_client`) →
+  `tools_interface`, since importing any submodule of `conversation` forces
+  `conversation/__init__.py` to run first, which imports `loop.py`, which
+  needs `tools_interface`) — fixed by recognizing `llm_client` is genuinely
+  shared infrastructure now, not conversation-specific, so it shouldn't
+  live nested inside a package only one of its two consumers belongs to.
+  `to_openai_tools` (which only `loop.py` ever calls) moved into
+  `conversation/loop.py` itself rather than travelling with the client.
+- **Registry gained an internal-parameter convention:** both Career
+  functions take an injectable `_chat_fn` (leading underscore) for test
+  dependency injection, mirroring `conversation/loop.py`'s existing
+  `chat_fn` pattern. Since these functions are registered tools, their
+  parameters get auto-converted to JSON Schema (`decisions.md` #13's
+  correction) — but a `Callable` parameter isn't JSON-Schema-representable,
+  which surfaced immediately as a real `PydanticInvalidForJsonSchema` error
+  on import, not a theoretical concern. Fix: `tools_interface/registry.py`'s
+  `_schema_for` now skips any parameter whose name starts with `_` —
+  a reusable convention for "internal, not model-facing" rather than a
+  one-off special case for this parameter.
+
+**Status:** Decided (2026-08-10).

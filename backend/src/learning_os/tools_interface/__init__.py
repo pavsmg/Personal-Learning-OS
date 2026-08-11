@@ -1,3 +1,4 @@
+from learning_os.career import analyze_job_fit, summarize_skills_for_cv
 from learning_os.mistakes import (
     estimate_mastery,
     get_learning_profile,
@@ -10,12 +11,10 @@ from learning_os.retrieval import get_note, related_notes, search_notes
 from learning_os.sessions import create_session, finish_session, summarize_session
 from learning_os.tools_interface.registry import TOOLS, Tool, call_tool, register
 from learning_os.tools_interface.stubs import (
-    analyze_job_fit,
     get_curriculum,
     get_language_profile,
     get_learning_statistics,
     retrieve_vocabulary,
-    summarize_skills_for_cv,
 )
 
 register("search_notes", "Keyword/full-text search over vault notes.", search_notes)

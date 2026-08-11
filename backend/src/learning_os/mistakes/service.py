@@ -48,20 +48,20 @@ def _conceptual_understanding(mistakes: list[MistakeEntry]) -> float:
     return max(0.0, min(1.0, 1.0 - average_confidence))
 
 
-def get_learning_profile(domain: str) -> list[MasteryEstimate]:
+def get_learning_profile(domain: str | None = None) -> list[MasteryEstimate]:
     mistakes = store.query_mistakes(domain=domain)
-    by_concept: dict[str, list[MistakeEntry]] = {}
+    by_domain_concept: dict[tuple[str, str], list[MistakeEntry]] = {}
     for mistake in mistakes:
-        by_concept.setdefault(mistake.concept, []).append(mistake)
+        by_domain_concept.setdefault((mistake.domain, mistake.concept), []).append(mistake)
 
     return [
         MasteryEstimate(
-            domain=domain,
+            domain=mistake_domain,
             concept=concept,
             conceptual_understanding=_conceptual_understanding(concept_mistakes),
             mistake_count=len(concept_mistakes),
         )
-        for concept, concept_mistakes in by_concept.items()
+        for (mistake_domain, concept), concept_mistakes in by_domain_concept.items()
     ]
 
 

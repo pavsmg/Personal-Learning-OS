@@ -23,6 +23,7 @@ def _schema_for(handler: Callable[..., Any]) -> dict[str, Any]:
             param.default if param.default is not inspect.Parameter.empty else ...,
         )
         for name, param in signature.parameters.items()
+        if not name.startswith("_")  # internal-only params (e.g. test-injected dependencies), not model-facing
     }
     model = create_model(f"{handler.__name__}_Params", **fields)
     return model.model_json_schema()

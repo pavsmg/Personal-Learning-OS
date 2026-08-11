@@ -1,6 +1,6 @@
 import json
 
-from learning_os.conversation.llm_client import LLMReply, ToolCallRequest
+from learning_os.llm_client import LLMReply, ToolCallRequest
 from learning_os.conversation.loop import END_SESSION_NUDGE, end_session, send_message, start_session
 
 

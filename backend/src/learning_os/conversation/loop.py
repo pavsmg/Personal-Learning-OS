@@ -3,17 +3,31 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from learning_os.conversation.llm_client import LLMReply, chat_completion, to_openai_tools
+from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.conversation.prompt import build_system_prompt
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionSummary
-from learning_os.tools_interface import call_tool
+from learning_os.tools_interface import TOOLS, call_tool
 
 CONVERSATION_TOOLS = ["search_notes", "get_note", "related_notes", "save_mistake", "get_recent_mistakes"]
 END_SESSION_NUDGE = "[The learner wants to end the session now.]"
 QUIT_COMMANDS = {"quit", "exit", "done"}
 
 ChatFn = Callable[[list[dict[str, Any]], list[dict[str, Any]]], LLMReply]
+
+
+def to_openai_tools(tool_names: list[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": TOOLS[name].description,
+                "parameters": TOOLS[name].parameters_schema,
+            },
+        }
+        for name in tool_names
+    ]
 
 
 @dataclass

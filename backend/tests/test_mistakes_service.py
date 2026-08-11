@@ -138,6 +138,60 @@ def test_get_learning_profile_empty_domain_returns_empty_list(tmp_path, monkeypa
     assert get_learning_profile("classical-ml") == []
 
 
+def test_get_learning_profile_no_domain_aggregates_across_all_domains(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    save_mistake(
+        concept="Gradient descent",
+        explanation="x",
+        category="conceptual",
+        severity="minor",
+        confidence=0.4,
+        domain="classical-ml",
+    )
+    save_mistake(
+        concept="Vowel Harmony",
+        explanation="y",
+        category="conceptual",
+        severity="minor",
+        confidence=0.2,
+        domain="languages",
+    )
+
+    profile = get_learning_profile()
+
+    assert {(p.domain, p.concept) for p in profile} == {
+        ("classical-ml", "Gradient descent"),
+        ("languages", "Vowel Harmony"),
+    }
+
+
+def test_get_learning_profile_groups_same_concept_name_by_domain_separately(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    save_mistake(
+        concept="Overfitting",
+        explanation="ml sense",
+        category="conceptual",
+        severity="minor",
+        confidence=0.3,
+        domain="classical-ml",
+    )
+    save_mistake(
+        concept="Overfitting",
+        explanation="stats sense",
+        category="conceptual",
+        severity="minor",
+        confidence=0.5,
+        domain="statistics",
+    )
+
+    profile = get_learning_profile()
+
+    assert len(profile) == 2
+    assert all(p.mistake_count == 1 for p in profile)
+
+
 def test_recommend_review_sorts_worst_first(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))

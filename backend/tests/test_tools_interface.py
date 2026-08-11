@@ -73,3 +73,24 @@ def test_save_mistake_schema_requires_domain():
 
     assert "domain" in schema["required"]
     assert schema["properties"]["domain"]["type"] == "string"
+
+
+def test_summarize_skills_for_cv_is_no_longer_a_stub(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+    result = call_tool("summarize_skills_for_cv")
+
+    assert "Not enough tracked session history" in result
+
+
+def test_summarize_skills_for_cv_schema_excludes_internal_chat_fn_param():
+    schema = TOOLS["summarize_skills_for_cv"].parameters_schema
+
+    assert schema["properties"] == {}
+
+
+def test_analyze_job_fit_schema_excludes_internal_chat_fn_param():
+    schema = TOOLS["analyze_job_fit"].parameters_schema
+
+    assert set(schema["properties"].keys()) == {"job_description"}
