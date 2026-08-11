@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     openai_realtime_model: str = "gpt-realtime-mini"
     openai_realtime_voice: str = "marin"
     db_path: Path = Path("data/mistakes.db")
+    language_lab_path: Path = Path.home() / "Projects" / "Language-Lab"
 
 
 @lru_cache

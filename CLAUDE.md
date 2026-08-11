@@ -11,15 +11,16 @@ vault. See `docs/vision.md` for the full picture.
 
 ## Current state
 
-**Build in progress — Milestone 9 of the roadmap complete.** The backend
+**Build in progress — Milestone 10 of the roadmap complete.** The backend
 (`backend/`, Python + FastAPI) implements the tool registry, retrieval, a
 pedagogy-checked conversation loop over both text and voice (`uv run
 learning-os-chat` / `learning-os-voice`), real SQLite-backed mistake
-memory feeding back into the session planner, and Career/CV coaching.
-Voice has real teaching-loop parity with text but not memory-update parity
-yet — `save_mistake` doesn't reliably fire over the Realtime API
-(`docs/decisions.md` #22, a documented real limitation, not a bug).
-Milestone 10 (Language coaching integration) is next. `docs/roadmap.md`
+memory feeding back into the session planner, Career/CV coaching, and
+Language-Lab integration (`uv run learning-os-language-import`) — real
+language practice history now flows through the same mistake-memory/
+scheduling system as every other domain. Voice still can't persist
+mistakes (`docs/decisions.md` #22, a documented Realtime-API limitation,
+not a bug). Milestone 11 (MCP server) is next. `docs/roadmap.md`
 has the intended build order; `docs/milestones.md` breaks that into
 checkable tasks and tracks exactly where things stand — check its "Where to
 resume" section at the start of a session, and update it at the end of one,

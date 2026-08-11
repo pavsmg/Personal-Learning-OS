@@ -94,3 +94,21 @@ def test_analyze_job_fit_schema_excludes_internal_chat_fn_param():
     schema = TOOLS["analyze_job_fit"].parameters_schema
 
     assert set(schema["properties"].keys()) == {"job_description"}
+
+
+def test_get_language_profile_is_no_longer_a_stub(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    lang_dir = tmp_path / "language_lab" / "languages" / "testlang"
+    lang_dir.mkdir(parents=True)
+    monkeypatch.setenv("LANGUAGE_LAB_PATH", str(tmp_path / "language_lab"))
+
+    result = call_tool("get_language_profile", language="testlang")
+
+    assert result["language"] == "testlang"
+    assert result["mastery"] == []
+
+
+def test_retrieve_vocabulary_still_a_stub():
+    with pytest.raises(NotImplementedError):
+        call_tool("retrieve_vocabulary", language="english")

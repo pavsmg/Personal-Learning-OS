@@ -26,22 +26,21 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Milestone 9 complete (partial parity, stated honestly).** Next
-up: Milestone 10 — Language coaching integration (`roadmap.md` step 10).
-Voice now has real teaching-loop parity with text (correction, transcript
-recording, session summaries, automatic-mode planning via
-`recommend_review`) — but **not** memory-update parity: `save_mistake`
-does not reliably fire over voice (`decisions.md` #22 — a real,
-4-attempts-confirmed Realtime-API limitation, not a bug in this
-codebase), so voice-session mistakes aren't currently persisted to
-`mistakes.db`. Worth a fresh look whenever revisiting the realtime
-integration, not scheduled to a specific milestone yet. Carried-forward
-known gaps, not bugs: cross-domain interleaving isn't implemented in the
-session planner yet (a backlog item, unrelated to voice);
-`MistakeEntry.corrected` never flips to `True`; `save_mistake`'s `domain`
-argument is model-supplied, not backend-verified (moot for voice right
-now since the tool doesn't fire there anyway). See `decisions.md` #9–22
-for the choices made so far.
+**Status: Milestone 10 complete.** Next up: Milestone 11 — MCP server
+(`roadmap.md` step 11, `mcp.md`) — a thin transport layer over the
+existing `tools_interface.TOOLS`/`call_tool` contract, no new logic per
+`mcp.md`'s own framing. Language-Lab's real English mistake data is now
+imported into `mistakes.db` and flows through the same
+`recommend_review`/Career-coaching machinery as every other domain
+(`decisions.md` #23); `retrieve_vocabulary` stays an honest stub (no
+source data exists). Carried-forward known gaps, not bugs: voice sessions
+still can't persist mistakes (`save_mistake` doesn't reliably fire over
+the Realtime API — `decisions.md` #22); `_infer_domain` doesn't detect a
+specific language from a vault-triggered session, so new language
+mistakes caught in normal conversation won't auto-join the language-import
+bucket (`decisions.md` #23); cross-domain interleaving isn't implemented
+in the session planner; `MistakeEntry.corrected` never flips to `True`.
+See `decisions.md` #9–23 for the choices made so far.
 
 ---
 
@@ -509,18 +508,45 @@ sessions:
 
 ## Milestone 10 — Language coaching integration (`roadmap.md` step 10)
 
-- [ ] Design the integration contract between `tools.md` and
+- [x] Design the integration contract between `tools.md` and
   `Language-Lab`'s existing tracked files (`ROADMAP.md`, `MISTAKES.md`,
-  `PRACTICE_LOG.md` per language).
-- [ ] Decide: read Language-Lab's files directly, or build an adapter that
-  translates them into this project's `domain-model.md` schema? Log as an
-  ADR — this is exactly the kind of module-boundary decision worth
-  recording.
-- [ ] Implement `get_language_profile` / `get_curriculum` /
+  `PRACTICE_LOG.md` per language). Regexes verified against all 4 real
+  languages' real files before any code was written.
+- [x] Decide: read Language-Lab's files directly, or build an adapter that
+  translates them into this project's `domain-model.md` schema? **Decided,
+  then reversed after discussion, before implementation**: import
+  `MISTAKES.md` as real `MistakeEntry` rows (`language/importer.py`,
+  reusing `save_mistake` unmodified) rather than a permanent read-only
+  lookup — logged in `decisions.md` #23 with the full reasoning (real
+  scheduling/Career-visibility payoff a read-only adapter wouldn't give,
+  since the source data is test entries with nothing precious to preserve
+  exactly-as-is).
+- [x] Implement `get_language_profile` / `get_curriculum` /
   `retrieve_vocabulary` against real Language-Lab data.
+  `get_language_profile` combines the imported mastery data (via
+  Milestone 6/7's existing `get_learning_profile`) with a live read of
+  `PRACTICE_LOG.md` (`recent_practice`) and `ROADMAP.md`
+  (`roadmap_status`) — only the mistakes half needed converting; the
+  other two are session-narrative/syllabus-status, not mistakes, no
+  schema conflict. `retrieve_vocabulary` stays an honest stub — confirmed
+  no vocabulary-tracking file exists anywhere in Language-Lab.
 
 **Definition of done:** a Personal Learning OS session can pull real
-Language-Lab practice history into its planning, for at least one language.
+Language-Lab practice history into its planning, for at least one
+language. **Done** — `uv run pytest` passes 125 tests. Real validation:
+`uv run learning-os-language-import` imported exactly 6 real English
+mistake entries into the actual `mistakes.db` (confirmed idempotent — 0 on
+re-run); `recommend_review()` afterward interleaved language concepts with
+vault-domain ones by weakness, not just in theory; a real conversation
+session — checked by inspecting `state.messages` directly, not inferred
+from the reply's wording — showed the model actually calling
+`get_language_profile("English")` and `get_curriculum("English")`, with
+the real imported data (the "make + object" pattern, "Grammar Precision —
+In progress") visibly shaping its opening question. Known limitation
+flagged, not fixed: `_infer_domain` doesn't yet detect a specific language
+from a vault-triggered session, so newly-caught mistakes from natural
+conversation won't automatically join the same per-language bucket this
+import created (`decisions.md` #23).
 
 ---
 

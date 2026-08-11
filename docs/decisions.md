@@ -726,3 +726,79 @@ parity" — everything else checked out identical to text.
 
 **Status:** Decided (2026-08-11) — the persistence gap is open, tracked
 here and in `milestones.md`, not silently dropped.
+
+---
+
+## 23. Milestone 10: import Language-Lab mistakes as real `MistakeEntry` rows, not a read-only adapter
+
+**Context:** `milestones.md` explicitly asked for a logged decision:
+read `Language-Lab`'s tracked files (`ROADMAP.md`/`MISTAKES.md`/
+`PRACTICE_LOG.md`) directly, or build an adapter into this project's own
+`domain-model.md` schema. My first pass (during planning) concluded
+"read directly, never convert" — `Status: Active/Watching/Resolved` and no
+per-entry timestamp don't map cleanly onto `MistakeEntry`'s typed
+`confidence: float`/`timestamp: datetime`, and forcing it seemed like
+fabricating precision the source data doesn't have.
+
+**The user pushed back, correctly, and the decision reversed before any
+code was written**: the Language-Lab data that exists today is test
+entries, not real accumulated practice history — nothing precious to
+preserve exactly-as-is. Treating it as a permanently-separate read-only
+lookup would throw away real value a conversion gives for free: imported
+as real `MistakeEntry` rows, language mistakes compete in the *same*
+`recommend_review` scheduling as vault-domain mistakes, and become visible
+to Career/CV coaching (`get_learning_profile`) — neither of which a
+read-only adapter provides. This also matches `decisions.md` #7's actual
+stated intent better than my first pass did: "Language-Lab gets
+integrated... rather than rebuilt from scratch," meaning its separate
+mistake-tracking is meant to be *absorbed*, not kept parallel forever.
+
+**Decision**: `language/importer.py` imports `MISTAKES.md` into
+`mistakes.db` via the existing, unmodified `save_mistake` (domain = the
+language name, lowercase). Mapping, agreed with the user as reasonable-for-now
+("applies for knowledge no matter the domain," not language-specific,
+free to revise later):
+- `confidence`: `Active → 0.7`, `Watching → 0.4`, `Resolved → 0.1`.
+- `severity`: `seen_count >= 2 → "moderate"`, else `"minor"` — a real
+  signal already in the source data (a pattern confirmed twice is more
+  entrenched), not invented.
+- `corrected` stays `False` for all imports (including `Resolved` ones) —
+  deliberately not threading a way to override `save_mistake`'s existing
+  behavior, since `corrected` doesn't feed `estimate_mastery`'s math today
+  (only `confidence` does — `decisions.md` #17); a `Resolved` entry's low
+  confidence (`0.1`) already produces a correctly-high
+  `conceptual_understanding` without it.
+- Idempotent by design: checks `get_learning_profile(domain=language)` for
+  an existing same-named concept before inserting, so re-running as
+  Language-Lab's files change over time is always safe, not a one-shot
+  migration.
+`ROADMAP.md` (syllabus/coverage status) and `PRACTICE_LOG.md` (session
+narrative) stay live reads via `get_curriculum`/`get_language_profile`'s
+`recent_practice` field — genuinely not mistakes, no schema conflict, no
+reason to force them into a typed store.
+
+**Known limitation, flagged rather than fixed or silently ignored**:
+`sessions/service.py`'s `_infer_domain` derives domain from the vault's
+generic `#languages` tag (confirmed: the vault's own `CLAUDE.md` tags
+*every* language with one shared tag, not per-language), so a *new*
+mistake caught during a vault-triggered session (e.g.
+`create_session("Turkish alphabet")`) lands in `domain="languages"`, not
+`domain="turkish"` — it won't automatically join the same bucket this
+import created unless the model happens to pass a specific language
+string to `save_mistake` on its own. Fixing `_infer_domain` to detect a
+specific language is real, separate work, out of this milestone's scope —
+noted honestly, not patched over.
+
+**Validated for real, not assumed**: `uv run learning-os-language-import`
+against the actual `mistakes.db` imported exactly 6 English entries (the
+only language with real data), confirmed idempotent (0 imported on
+re-run). `recommend_review()` with no domain filter afterward returned
+language concepts interleaved with vault-domain ones by weakness, proving
+the "same scheduling loop" claim isn't theoretical. A real conversation
+session (inspecting `state.messages` directly, not inferring from prose)
+confirmed the model actually called `get_language_profile("English")` and
+`get_curriculum("English")`, and the real imported data (the "make +
+object" pattern, "Grammar Precision — In progress") directly shaped its
+opening question.
+
+**Status:** Decided (2026-08-11).

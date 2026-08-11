@@ -19,6 +19,7 @@ learning-os = "learning_os.main:run"
 learning-os-chat = "learning_os.conversation.loop:run"
 learning-os-career = "learning_os.career.cli:run"
 learning-os-voice = "learning_os.realtime.loop:run"
+learning-os-language-import = "learning_os.language.cli:run"
 
 [build-system]
 requires = ["uv_build>=0.11.29,<0.12.0"]

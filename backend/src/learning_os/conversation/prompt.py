@@ -1,6 +1,14 @@
 from learning_os.sessions.models import SessionPlan
 
-TUTORING_TOOLS = ["search_notes", "get_note", "related_notes", "save_mistake", "get_recent_mistakes"]
+TUTORING_TOOLS = [
+    "search_notes",
+    "get_note",
+    "related_notes",
+    "save_mistake",
+    "get_recent_mistakes",
+    "get_language_profile",
+    "get_curriculum",
+]
 
 SYSTEM_PROMPT_TEMPLATE = """\
 You are a personal learning coach running a spoken-style text tutoring \
@@ -46,6 +54,10 @@ domain to check whether a past session already flagged a gap worth \
 re-testing today.
 8. Open the session yourself with a brief, natural greeting and your first \
 question — don't wait for the learner to start.
+9. If today's topic is language practice (English, German, Japanese, or \
+Turkish), you may call get_language_profile and get_curriculum with that \
+language's name to check tracked practice history and curriculum status \
+from Language-Lab before quizzing.
 """
 
 

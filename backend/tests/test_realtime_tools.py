@@ -20,7 +20,7 @@ def test_to_realtime_tools_preserves_real_parameters_schema():
     assert tools[0]["parameters"]["required"] == ["title"]
 
 
-def test_tutoring_tools_includes_mistake_memory_tools():
+def test_tutoring_tools_includes_mistake_memory_and_language_tools():
     tools = to_realtime_tools(TUTORING_TOOLS)
 
     names = {t["name"] for t in tools}
@@ -30,4 +30,6 @@ def test_tutoring_tools_includes_mistake_memory_tools():
         "related_notes",
         "save_mistake",
         "get_recent_mistakes",
+        "get_language_profile",
+        "get_curriculum",
     }
