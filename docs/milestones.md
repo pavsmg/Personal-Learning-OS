@@ -26,19 +26,24 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
-**Status: Pedagogy gate passed (GO) — ready for Milestone 8.** Next up:
-Milestone 8, first task — OpenAI Realtime integration (voice,
-`roadmap.md` step 8). The gate (`decisions.md` #19) reviewed all ~7 real
-sessions across Milestones 5–7 against `pedagogy.md`'s realistic goals:
-recall-testing is consistently real, not just discussion, and the one gap
-Milestone 5 found was fixed and reverified. Two non-blocking notes carried
-into Milestone 8 and beyond, not bugs: cross-domain interleaving isn't
-actually implemented in the session planner yet (confirmed against real
-`create_session` output — a future backlog item, unrelated to voice
-specifically); `MistakeEntry.corrected` never flips to `True` (nothing
-re-verifies a past mistake as resolved yet); `save_mistake`'s `domain`
-argument is model-supplied, not backend-verified. See
-`decisions.md` #9–19 for the choices made so far.
+**Status: Milestone 8 complete.** Next up: Milestone 9 — Voice
+conversations (`roadmap.md` step 9), first task: port the full session
+loop (plan → converse → detect mistakes → summarize → update memory) from
+text to voice. Milestone 8 deliberately stopped short of this — the
+realtime loop (`realtime/loop.py`) only exposes the 3 retrieval tools, not
+`save_mistake`/`finish_session`/`summarize_session`/transcript recording —
+so Milestone 9 is where those get wired in, mirroring exactly how
+Milestone 5 built the text loop and Milestone 6 closed the mistake-memory
+loop on top of it. `uv run learning-os-voice` works today (real hardware
+confirmed present) but only for the retrieval/tool-calling slice; a real
+human-voice conversation exercising the full loop is Milestone 9's actual
+deliverable ("run at least 3 full voice sessions"). Carried-forward known
+gaps, not bugs: cross-domain interleaving isn't implemented in the session
+planner yet (confirmed against real `create_session` output — a backlog
+item, unrelated to voice); `MistakeEntry.corrected` never flips to `True`;
+`save_mistake`'s `domain` argument is model-supplied, not backend-verified.
+See
+`decisions.md` #9–20 for the choices made so far.
 
 ---
 
@@ -402,17 +407,43 @@ fully offline. Real validation, in order:
 
 ## Milestone 8 — OpenAI Realtime integration (`roadmap.md` step 8)
 
-- [ ] Get a working realtime smoke test in this project's context (see
-  `Language-Lab/realtime-test/` for a minimal existing WebSocket example
-  against the OpenAI Realtime API — a starting reference, not something
-  this repo depends on).
-- [ ] Wire Milestone 3's tool/function contract into the Realtime API's
-  function-calling shape.
-- [ ] Handle session config: voice choice, output modalities, interruption
-  (barge-in) handling.
+- [x] Get a working realtime smoke test in this project's context. Used
+  the `openai` SDK's own built-in `client.realtime.connect()` rather than
+  hand-rolling WebSocket code (`decisions.md` #20) —
+  `Language-Lab/realtime-test/` stayed the reference for the audio
+  pipeline (PipeWire echo-cancel + `parec`/`paplay`), ported to Python via
+  `asyncio.create_subprocess_exec` in `realtime/audio.py`.
+- [x] Wire Milestone 3's tool/function contract into the Realtime API's
+  function-calling shape: `realtime/tools.py`'s `to_realtime_tools` (the
+  flat `{"type":"function","name":...}` shape, confirmed different from
+  Chat Completions' nested envelope before writing any code). Scoped to
+  the 3 retrieval tools only (`search_notes`/`get_note`/`related_notes`)
+  — `save_mistake`/session-lifecycle wiring is Milestone 9's explicit job,
+  not this one's (`decisions.md` #20).
+- [x] Handle session config: voice (`marin`, configurable), output
+  modalities, and interruption — barge-in cancels the response
+  server-side (`connection.response.cancel()`) *and* cuts local playback
+  (`speaker.restart()`), improving on the reference script which only did
+  the local half.
 
 **Definition of done:** a live voice call can trigger at least one real
 backend tool call (e.g. `search_notes`) and speak back a real result.
+**Done** — validated for real, not assumed: `uv run pytest` passes 99
+tests (the WebSocket connection, session config, event loop, and audio
+subprocess plumbing are explicitly *not* offline-tested — stated as a real
+boundary in `decisions.md` #20, not silently skipped). Real validation
+(text input standing in for human speech — see #20 for why): confirmed
+`gpt-realtime-mini` availability against the live model list; a real
+session over text input triggered a real `search_notes` → `get_note` tool
+chain (the model chained both unprompted before answering), produced a
+real transcript carrying the same teacher-style prompt behavior from text
+sessions ("...Now, how would you explain what the gradient is?"), and
+477,600 bytes of real PCM16 24kHz audio, verified as a valid WAV file, not
+just assumed non-empty. Separately confirmed the `pactl`/`parec` audio
+subprocess plumbing itself spawns, captures real bytes, and cleans up
+completely (`pactl list` showed no leftover virtual devices afterward). A
+real human-voice round trip is Milestone 9's job, or `uv run
+learning-os-voice` right now since this machine has real audio hardware.
 
 ---
 

@@ -1,0 +1,121 @@
+import asyncio
+import json
+import sys
+from functools import lru_cache
+from typing import Any
+
+from openai import AsyncOpenAI
+
+from learning_os.config import get_settings
+from learning_os.conversation.prompt import build_system_prompt
+from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
+from learning_os.realtime.tools import to_realtime_tools
+from learning_os.serialization import serialize_for_json, to_json
+from learning_os.sessions import create_session
+from learning_os.sessions.models import SessionPlan
+from learning_os.tools_interface import call_tool
+
+REALTIME_TOOLS = ["search_notes", "get_note", "related_notes"]
+
+
+@lru_cache
+def _get_async_client() -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=get_settings().openai_api_key)
+
+
+async def handle_tool_call(name: str, arguments: dict[str, Any]) -> str:
+    try:
+        result = call_tool(name, **arguments)
+        return to_json(serialize_for_json(result))
+    except Exception as exc:  # noqa: BLE001 — feed the error back to the model, don't crash the loop
+        return to_json({"error": str(exc)})
+
+
+def _session_config(plan: SessionPlan) -> dict[str, Any]:
+    return {
+        "type": "realtime",
+        "output_modalities": ["audio"],
+        "instructions": build_system_prompt(plan),
+        "audio": {
+            "input": {
+                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                "turn_detection": {"type": "server_vad"},
+                "transcription": {"model": "whisper-1"},
+            },
+            "output": {
+                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                "voice": get_settings().openai_realtime_voice,
+            },
+        },
+        "tools": to_realtime_tools(REALTIME_TOOLS),
+    }
+
+
+async def run_voice_session(topic: str | None = None) -> None:
+    plan = create_session(topic)
+    client = _get_async_client()
+
+    async with client.realtime.connect(model=get_settings().openai_realtime_model) as connection:
+        await connection.session.update(session=_session_config(plan))
+
+        module_id = await load_echo_cancel_module()
+        speaker = Speaker()
+        await speaker.start()
+        response_in_progress = False
+
+        async def stream_microphone() -> None:
+            async with Microphone() as mic:
+                async for chunk in mic.chunks():
+                    await connection.input_audio_buffer.append(audio=chunk)
+
+        mic_task = asyncio.create_task(stream_microphone())
+        print("Ready — start talking any time, even while it's speaking. Press Ctrl+C to stop.\n")
+
+        try:
+            async for event in connection:
+                if event.type == "input_audio_buffer.speech_started":
+                    print("\n[listening...]")
+                    if response_in_progress:
+                        # Barge-in: cancel the server-side response *and* cut
+                        # local playback immediately, rather than letting
+                        # whatever's still queued drain out and overlap.
+                        await connection.response.cancel()
+                        await speaker.restart()
+                elif event.type == "input_audio_buffer.speech_stopped":
+                    print("[thinking...]")
+                elif event.type == "conversation.item.input_audio_transcription.completed":
+                    print(f"You said: {event.transcript}")
+                elif event.type == "response.output_audio_transcript.delta":
+                    print(event.delta, end="", flush=True)
+                elif event.type == "response.created":
+                    response_in_progress = True
+                elif event.type == "response.output_audio.delta":
+                    await speaker.write(event.delta)
+                elif event.type == "response.function_call_arguments.done":
+                    output = await handle_tool_call(event.name, json.loads(event.arguments))
+                    await connection.conversation.item.create(
+                        item={"type": "function_call_output", "call_id": event.call_id, "output": output}
+                    )
+                    await connection.response.create()
+                elif event.type == "response.done":
+                    response_in_progress = False
+                    print()
+                elif event.type == "error":
+                    print("API error:", event.error)
+        finally:
+            mic_task.cancel()
+            await asyncio.gather(mic_task, return_exceptions=True)
+            await speaker.stop()
+            await unload_module(module_id)
+
+
+def run() -> None:
+    if len(sys.argv) > 1:
+        topic = " ".join(sys.argv[1:])
+    else:
+        topic = input("What do you want to study today? (leave blank to let it pick) ").strip() or None
+    asyncio.run(run_voice_session(topic))
+
+
+if __name__ == "__main__":
+    run()

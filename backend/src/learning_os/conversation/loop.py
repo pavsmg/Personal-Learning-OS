@@ -1,10 +1,10 @@
-import json
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.conversation.prompt import build_system_prompt
+from learning_os.llm_client import LLMReply, chat_completion
+from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionSummary
 from learning_os.tools_interface import TOOLS, call_tool
@@ -52,7 +52,7 @@ def _get_assistant_reply(messages: list[dict[str, Any]], chat_fn: ChatFn = chat_
                     {
                         "id": call.id,
                         "type": "function",
-                        "function": {"name": call.name, "arguments": _dumps(call.arguments)},
+                        "function": {"name": call.name, "arguments": to_json(call.arguments)},
                     }
                     for call in reply.tool_calls
                 ],
@@ -61,22 +61,10 @@ def _get_assistant_reply(messages: list[dict[str, Any]], chat_fn: ChatFn = chat_
         for call in reply.tool_calls:
             try:
                 result = call_tool(call.name, **call.arguments)
-                content = _dumps(_serialize(result))
+                content = to_json(serialize_for_json(result))
             except Exception as exc:  # noqa: BLE001 — feed the error back to the model, don't crash the loop
-                content = _dumps({"error": str(exc)})
+                content = to_json({"error": str(exc)})
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
-
-
-def _serialize(value: Any) -> Any:
-    if isinstance(value, list):
-        return [_serialize(item) for item in value]
-    if hasattr(value, "model_dump"):
-        return value.model_dump(mode="json")
-    return value
-
-
-def _dumps(value: Any) -> str:
-    return json.dumps(value)
 
 
 def start_session(topic: str | None = None, chat_fn: ChatFn = chat_completion) -> tuple[ConversationState, str]:

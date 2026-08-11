@@ -561,3 +561,80 @@ integration on top of. Neither non-blocking note above is a recall-testing
 defect — they're scoped, known limitations, not silently-accepted risk.
 
 **Status:** Decided (2026-08-11).
+
+---
+
+## 20. Milestone 8: use the SDK's built-in Realtime client, flat tool shape, text-input validation, M8/M9 scope split
+
+**Context:** `roadmap.md` step 8 needed a working OpenAI Realtime API
+integration: connect, configure a session, wire the tool contract into its
+function-calling shape, handle voice/modalities/barge-in.
+
+**Decisions:**
+- **Use `openai`'s built-in `client.realtime.connect(model=...)`**
+  (already present in the installed SDK, 2.53.0 — confirmed by reading
+  `openai/resources/realtime/realtime.py` and `openai/types/realtime/*`
+  directly, not assumed) rather than hand-rolling WebSocket code the way
+  `Language-Lab/realtime-test/index.js` does. Gives a typed async
+  connection (`connection.session`/`.response`/`.input_audio_buffer`/
+  `.conversation.item`, `async for event in connection`) — eliminates most
+  of the protocol-level risk a raw implementation would carry.
+  `Language-Lab`'s script remained the reference for the *audio pipeline*
+  only (PipeWire echo-cancel + `parec`/`paplay`), ported to Python via
+  `asyncio.create_subprocess_exec` in `realtime/audio.py` — confirmed this
+  environment actually has that stack and real audio hardware
+  (`pactl list short sinks/sources`) before relying on it.
+- **The Realtime API's function-tool shape is flat** —
+  `{"type":"function","name":,"description":,"parameters":}` — unlike Chat
+  Completions' nested envelope (`conversation/loop.py`'s `to_openai_tools`).
+  New `realtime/tools.py:to_realtime_tools` handles this envelope
+  specifically; confirmed via `RealtimeFunctionToolParam` before writing
+  any code, and confirmed again live (`session.updated`'s `tools` echoed
+  back with real `name` attributes, not dict keys — required an attribute-
+  access fix during validation, not a design change).
+- **`serialize_for_json`/`to_json` extracted** from `conversation/loop.py`
+  into top-level `learning_os/serialization.py` — both the text and
+  realtime loops need to turn a tool result (a pydantic model or list of
+  them) into a JSON string for their respective wire formats. Pure
+  extraction, no behavior change (`test_conversation_loop.py` passed
+  unchanged after).
+- **Scope split from Milestone 9, stated explicitly**: `REALTIME_TOOLS =
+  ["search_notes", "get_note", "related_notes"]` only — `save_mistake`,
+  `get_recent_mistakes`, `finish_session`, `summarize_session`, and
+  transcript recording are *not* wired into the realtime loop.
+  `roadmap.md` already phases this as Milestone 9's "port the full session
+  loop... from text to voice" — Milestone 8 stays a protocol/tool-calling
+  proof, not a feature port, so it doesn't overlap M9's explicit task.
+- **Validation used text input, not real human speech** — stated as a
+  real constraint, not glossed over: nothing about this milestone lets an
+  AI assistant produce genuine spoken audio input or perceive real speaker
+  output. The Realtime API accepts text (`conversation.item.create` with
+  `input_text`) in the same live session while still producing real audio
+  *output*, so the protocol/tool-calling/audio-generation path got a real
+  end-to-end check without needing a human. Confirmed live: a real
+  `search_notes` → `get_note` tool chain (the model chose to call both
+  before answering, unprompted), a real transcript ("Gradient descent is
+  an optimization algorithm... Now, how would you explain what the
+  gradient is?" — the *same* teacher-style prompt rules from
+  `conversation/prompt.py` carried over correctly, including asking a
+  follow-up rather than just answering), and 477,600 bytes of real PCM16
+  24kHz audio, verified as a valid WAV (not just assumed non-empty).
+  Separately, confirmed the `pactl`/`parec` subprocess plumbing itself
+  spawns and captures real bytes (echo-cancel module loads, mic captures,
+  clean unload verified via `pactl list` afterward showing no leftover
+  virtual devices) — not a substitute for a real spoken exchange, just
+  confirmation the mechanism Milestone 9 depends on isn't broken. A true
+  human-voice round trip is Milestone 9's explicit "run at least 3 full
+  voice sessions," or something to try directly now since real hardware is
+  present (`uv run learning-os-voice`).
+- **Barge-in improves on the reference script**: on
+  `input_audio_buffer.speech_started` while a response is in progress,
+  `realtime/loop.py` calls `connection.response.cancel()` (stops server-
+  side generation) *and* `speaker.restart()` (cuts local playback) —
+  `Language-Lab`'s script only did the local-playback half.
+- **Config**: `openai_realtime_model` (default `gpt-realtime-mini`,
+  verified against the live model list before trusting it, same discipline
+  as #9/#14) and `openai_realtime_voice` (default `marin` — the SDK's own
+  docstring recommends `marin`/`cedar` for best quality).
+
+**Status:** Decided (2026-08-11).

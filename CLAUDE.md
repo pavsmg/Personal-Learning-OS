@@ -11,13 +11,13 @@ vault. See `docs/vision.md` for the full picture.
 
 ## Current state
 
-**Build in progress — Milestone 7 of the roadmap complete.** The backend
+**Build in progress — Milestone 8 of the roadmap complete.** The backend
 (`backend/`, Python + FastAPI) implements the tool registry, retrieval, a
-pedagogy-checked text-only conversation loop against a real LLM, real
-SQLite-backed mistake memory feeding back into the session planner, and
-Career/CV coaching reading real tracked mastery data. The pre-voice
-`docs/pedagogy.md` gate (`docs/roadmap.md`) has passed (GO) — Milestone 8
-(voice) is next. `docs/roadmap.md`
+pedagogy-checked text-only conversation loop, real SQLite-backed mistake
+memory feeding back into the session planner, Career/CV coaching, and a
+working OpenAI Realtime voice smoke test (`uv run learning-os-voice`) with
+real tool-calling over voice. Milestone 9 (porting the full session loop —
+mistake detection, summaries — to voice) is next. `docs/roadmap.md`
 has the intended build order; `docs/milestones.md` breaks that into
 checkable tasks and tracks exactly where things stand — check its "Where to
 resume" section at the start of a session, and update it at the end of one,
