@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from learning_os.retrieval.loader import load_vault
-from learning_os.retrieval.service import get_note, related_notes, search_notes
+from learning_os.retrieval.service import concept_importance, get_note, related_notes, search_notes
 
 REAL_VAULT_PATH = Path("~/Documents/Obsidian-Digital-Brain").expanduser()
 
@@ -73,3 +73,11 @@ def test_vault_loaded_more_than_a_thousand_notes():
     notes = load_vault(REAL_VAULT_PATH)
 
     assert len(notes) > 1000
+
+
+def test_ai_ml_domain_concept_importance_tcp_is_positive():
+    assert concept_importance("TCP") > 0
+
+
+def test_concept_importance_unknown_concept_returns_zero():
+    assert concept_importance("xqzzptmnvbklw") == 0

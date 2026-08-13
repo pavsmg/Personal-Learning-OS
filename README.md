@@ -20,6 +20,19 @@ cd backend
 uv run learning-os        # starts the server on http://127.0.0.1:8000
 ```
 
+`learning-os-chat` and `learning-os-voice` both accept an optional topic and a
+`-d`/`--debug` flag that prints every tool call (name, arguments, and result)
+as it happens, for inspecting exactly what the model is calling behind the
+scenes:
+
+```sh
+uv run learning-os-chat --debug                  # let it pick a topic, show tool calls
+uv run learning-os-chat --debug gradient descent # explicit topic, show tool calls
+uv run learning-os-voice --debug                 # same, for a voice session
+```
+
+Omit `--debug` for a clean session with no tool-call output.
+
 Run the test suite (or a single test) with:
 
 ```sh
@@ -42,5 +55,7 @@ uv run pytest tests/test_main.py -v    # one file
 - [`docs/mcp.md`](docs/mcp.md) — later-stage MCP exposure
 - [`docs/roadmap.md`](docs/roadmap.md) — build order
 - [`docs/milestones.md`](docs/milestones.md) — detailed task-by-task
-  tracker; start here each session
+  tracker for the original build; start here each session
+- [`docs/backlog.md`](docs/backlog.md) — post-MVP work: pending
+  real-conversation validations and unscoped improvement ideas
 - [`docs/decisions.md`](docs/decisions.md) — ADR log

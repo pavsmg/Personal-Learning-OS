@@ -3,6 +3,8 @@ from typing import Any
 from learning_os.language.loader import language_dir, parse_practice_log, parse_roadmap
 from learning_os.mistakes import get_learning_profile
 
+LANGUAGES = ("english", "german", "japanese", "turkish")
+
 
 def get_language_profile(language: str) -> dict[str, Any]:
     directory = language_dir(language)

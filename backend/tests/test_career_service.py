@@ -9,6 +9,11 @@ def set_env(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
 
 
+def write_vault(tmp_path, files: dict[str, str]):
+    for name, content in files.items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+
+
 class FakeChat:
     def __init__(self, reply: LLMReply):
         self._reply = reply
@@ -93,3 +98,67 @@ def test_analyze_job_fit_forces_tool_choice_and_parses_result(tmp_path, monkeypa
     assert result == JobFitAnalysis(matching_strengths=["Gradient descent"], gaps=["Kubernetes"])
     assert chat.calls[0]["tool_choice"] == {"type": "function", "function": {"name": "record_job_fit_analysis"}}
     assert chat.calls[0]["tools"][0]["function"]["name"] == "record_job_fit_analysis"
+
+
+def test_summarize_skills_for_cv_sorts_and_annotates_by_vault_importance(tmp_path, monkeypatch):
+    write_vault(
+        tmp_path,
+        {
+            "Hub.md": "central concept.",
+            "A.md": "builds on [[Hub]].",
+            "B.md": "also builds on [[Hub]].",
+            "Leaf.md": "isolated concept, nothing links to it.",
+        },
+    )
+    set_env(monkeypatch, tmp_path)
+    # Inserted in importance-ascending order (Leaf, then Hub) so a passing
+    # test proves the importance-sort actually reorders them, not just
+    # that they happened to already be in the right order.
+    save_mistake(
+        concept="Leaf",
+        explanation="minor slip",
+        category="conceptual",
+        severity="minor",
+        confidence=0.1,
+        domain="classical-ml",
+    )
+    save_mistake(
+        concept="Hub",
+        explanation="minor slip",
+        category="conceptual",
+        severity="minor",
+        confidence=0.1,
+        domain="classical-ml",
+    )
+    chat = FakeChat(LLMReply(content="summary", tool_calls=[]))
+
+    summarize_skills_for_cv(_chat_fn=chat)
+
+    content = chat.calls[0]["messages"][0]["content"]
+    assert "Hub" in content and "vault_importance=2" in content
+    assert "Leaf" in content and "vault_importance=0" in content
+    assert content.index("Hub") < content.index("Leaf")
+
+
+def test_analyze_job_fit_prompt_does_not_include_vault_importance(tmp_path, monkeypatch):
+    set_env(monkeypatch, tmp_path)
+    save_mistake(
+        concept="Gradient descent",
+        explanation="minor slip",
+        category="conceptual",
+        severity="minor",
+        confidence=0.1,
+        domain="classical-ml",
+    )
+    chat = FakeChat(
+        LLMReply(
+            content=None,
+            tool_calls=[
+                ToolCallRequest(id="call_1", name="record_job_fit_analysis", arguments={"matching_strengths": [], "gaps": []})
+            ],
+        )
+    )
+
+    analyze_job_fit("some job description", _chat_fn=chat)
+
+    assert "vault_importance" not in chat.calls[0]["messages"][0]["content"]

@@ -60,9 +60,27 @@ def parse_practice_log(text: str) -> list[PracticeLogEntry]:
 
 
 def parse_roadmap(text: str) -> list[str]:
-    results = []
+    results: list[str] = []
+    section: str | None = None
+    status_parts: list[str] = []
+
+    def flush() -> None:
+        if section is not None:
+            results.append(f"{section} — {' '.join(status_parts)}")
+
     for line in text.splitlines():
         match = ROADMAP_LINE_RE.match(line)
         if match:
-            results.append(f"{match.group('section')} — {match.group('status')}")
+            flush()
+            section = match.group("section")
+            status_parts = [match.group("status").strip()]
+        elif section is not None and line.strip() and line[:1].isspace():
+            # Soft-wrapped continuation of the previous entry's status text
+            # (indented, doesn't start a new "- N." item).
+            status_parts.append(line.strip())
+        else:
+            flush()
+            section = None
+            status_parts = []
+    flush()
     return results

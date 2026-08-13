@@ -95,3 +95,30 @@ def test_parse_roadmap_extracts_section_status_lines():
 
 def test_parse_roadmap_no_matching_lines_returns_empty_list():
     assert parse_roadmap("No sessions logged yet — status is Not started across the board.\n") == []
+
+
+def test_parse_roadmap_joins_soft_wrapped_status_continuation_lines():
+    text = (
+        "- 1. Grammar Precision — In progress (adverb/adjective complement pattern\n"
+        "  surfaced 2026-08-02)\n"
+        "- 2. Prepositions & Articles — In progress (a/an pattern surfaced 2026-08-02)\n"
+        "- 3. Vocabulary Precision & False Friends — In progress (capacities/\n"
+        "  capabilities and phrasal-verb-blending patterns surfaced 2026-08-02)\n"
+    )
+
+    lines = parse_roadmap(text)
+
+    assert lines == [
+        "Grammar Precision — In progress (adverb/adjective complement pattern surfaced 2026-08-02)",
+        "Prepositions & Articles — In progress (a/an pattern surfaced 2026-08-02)",
+        "Vocabulary Precision & False Friends — In progress (capacities/ capabilities and "
+        "phrasal-verb-blending patterns surfaced 2026-08-02)",
+    ]
+
+
+def test_parse_roadmap_does_not_merge_unindented_trailing_prose():
+    text = "- 1. Basics — In progress\n\nSome unrelated closing paragraph, not a continuation.\n"
+
+    lines = parse_roadmap(text)
+
+    assert lines == ["Basics — In progress"]

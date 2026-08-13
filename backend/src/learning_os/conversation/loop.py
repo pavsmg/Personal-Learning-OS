@@ -1,4 +1,4 @@
-import sys
+import argparse
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -33,9 +33,12 @@ def to_openai_tools(tool_names: list[str]) -> list[dict[str, Any]]:
 class ConversationState:
     session_id: str
     messages: list[dict[str, Any]]
+    debug: bool = False
 
 
-def _get_assistant_reply(messages: list[dict[str, Any]], chat_fn: ChatFn = chat_completion) -> str:
+def _get_assistant_reply(
+    messages: list[dict[str, Any]], chat_fn: ChatFn = chat_completion, debug: bool = False
+) -> str:
     tools = to_openai_tools(TUTORING_TOOLS)
     while True:
         reply = chat_fn(messages, tools)
@@ -63,39 +66,55 @@ def _get_assistant_reply(messages: list[dict[str, Any]], chat_fn: ChatFn = chat_
                 content = to_json(serialize_for_json(result))
             except Exception as exc:  # noqa: BLE001 — feed the error back to the model, don't crash the loop
                 content = to_json({"error": str(exc)})
+            if debug:
+                print(f"\n[tool call] {call.name}({call.arguments}) -> {content[:200]}")
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
 
-def start_session(topic: str | None = None, chat_fn: ChatFn = chat_completion) -> tuple[ConversationState, str]:
+def start_session(
+    topic: str | None = None, chat_fn: ChatFn = chat_completion, debug: bool = False
+) -> tuple[ConversationState, str]:
     plan = create_session(topic)
     messages = [{"role": "system", "content": build_system_prompt(plan)}]
-    opening = _get_assistant_reply(messages, chat_fn)
+    opening = _get_assistant_reply(messages, chat_fn, debug=debug)
     record_turn(plan.session_id, "assistant", opening)
-    return ConversationState(session_id=plan.session_id, messages=messages), opening
+    return ConversationState(session_id=plan.session_id, messages=messages, debug=debug), opening
 
 
 def send_message(state: ConversationState, user_text: str, chat_fn: ChatFn = chat_completion) -> str:
     state.messages.append({"role": "user", "content": user_text})
     record_turn(state.session_id, "user", user_text)
-    reply = _get_assistant_reply(state.messages, chat_fn)
+    reply = _get_assistant_reply(state.messages, chat_fn, debug=state.debug)
     record_turn(state.session_id, "assistant", reply)
     return reply
 
 
 def end_session(state: ConversationState, chat_fn: ChatFn = chat_completion) -> tuple[str, SessionSummary]:
     state.messages.append({"role": "user", "content": END_SESSION_NUDGE})
-    closing = _get_assistant_reply(state.messages, chat_fn)
+    closing = _get_assistant_reply(state.messages, chat_fn, debug=state.debug)
     record_turn(state.session_id, "assistant", closing)
     finish_session(state.session_id)
     return closing, summarize_session(state.session_id)
 
 
 def run() -> None:
-    if len(sys.argv) > 1:
-        topic = " ".join(sys.argv[1:])
-    else:
+    parser = argparse.ArgumentParser(description="Personal Learning OS — text conversation")
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Print each tool call (name, arguments, and result) as it happens, for inspection/testing.",
+    )
+    parser.add_argument(
+        "topic", nargs="*", help="Topic to study (omit to let the system pick automatically)."
+    )
+    args = parser.parse_args()
+
+    topic = " ".join(args.topic) if args.topic else None
+    if topic is None:
         topic = input("What do you want to study today? (leave blank to let it pick) ").strip() or None
-    state, opening = start_session(topic)
+
+    state, opening = start_session(topic, debug=args.debug)
     print(f"\n{opening}\n")
 
     while True:

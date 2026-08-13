@@ -1,6 +1,6 @@
+import argparse
 import asyncio
 import json
-import sys
 from functools import lru_cache
 from typing import Any
 
@@ -50,7 +50,7 @@ def _session_config(plan: SessionPlan) -> dict[str, Any]:
     }
 
 
-async def run_voice_session(topic: str | None = None) -> None:
+async def run_voice_session(topic: str | None = None, debug: bool = False) -> None:
     plan = create_session(topic)
     client = _get_async_client()
     log = SessionLog(plan.session_id)
@@ -100,7 +100,8 @@ async def run_voice_session(topic: str | None = None) -> None:
                 elif event.type == "response.function_call_arguments.done":
                     arguments = json.loads(event.arguments)
                     output = await handle_tool_call(event.name, arguments)
-                    print(f"\n[tool call] {event.name}({arguments}) -> {output[:200]}")
+                    if debug:
+                        print(f"\n[tool call] {event.name}({arguments}) -> {output[:200]}")
                     log.write(f"TOOL CALL: {event.name}({arguments}) -> {output}")
                     await connection.conversation.item.create(
                         item={"type": "function_call_output", "call_id": event.call_id, "output": output}
@@ -131,11 +132,23 @@ async def run_voice_session(topic: str | None = None) -> None:
 
 
 def run() -> None:
-    if len(sys.argv) > 1:
-        topic = " ".join(sys.argv[1:])
-    else:
+    parser = argparse.ArgumentParser(description="Personal Learning OS — voice conversation")
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Print each tool call (name, arguments, and result) as it happens, for inspection/testing.",
+    )
+    parser.add_argument(
+        "topic", nargs="*", help="Topic to study (omit to let the system pick automatically)."
+    )
+    args = parser.parse_args()
+
+    topic = " ".join(args.topic) if args.topic else None
+    if topic is None:
         topic = input("What do you want to study today? (leave blank to let it pick) ").strip() or None
-    asyncio.run(run_voice_session(topic))
+
+    asyncio.run(run_voice_session(topic, debug=args.debug))
 
 
 if __name__ == "__main__":

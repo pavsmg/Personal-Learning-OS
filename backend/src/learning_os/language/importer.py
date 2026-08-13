@@ -1,10 +1,10 @@
 from learning_os.language.loader import language_dir, parse_mistakes
 from learning_os.language.models import MistakePattern
+from learning_os.language.service import LANGUAGES
 from learning_os.mistakes import get_learning_profile, save_mistake
 
 STATUS_CONFIDENCE = {"Active": 0.7, "Watching": 0.4, "Resolved": 0.1}
 DEFAULT_CONFIDENCE = 0.4
-LANGUAGES = ("english", "german", "japanese", "turkish")
 
 
 def _severity_for(pattern: MistakePattern) -> str:

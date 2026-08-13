@@ -1,13 +1,35 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
+from learning_os.mistakes import store
+from learning_os.mistakes.models import MistakeEntry
 from learning_os.mistakes.service import (
     estimate_mastery,
     get_learning_profile,
     get_recent_mistakes,
+    recommend_domain,
     recommend_review,
+    recommend_review_scored,
     save_mistake,
     search_mistakes,
 )
+
+
+def insert_mistake_at(concept: str, domain: str, confidence: float, days_ago: float) -> None:
+    store.insert_mistake(
+        MistakeEntry(
+            domain=domain,
+            concept=concept,
+            explanation="x",
+            category="conceptual",
+            severity="minor",
+            timestamp=datetime.now(UTC) - timedelta(days=days_ago),
+            corrected=False,
+            confidence=confidence,
+            related_notes=[],
+        )
+    )
 
 
 def test_save_mistake_persists_and_returns_entry(tmp_path, monkeypatch):
@@ -220,3 +242,76 @@ def test_recommend_review_no_data_returns_empty_list(tmp_path, monkeypatch):
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
 
     assert recommend_review() == []
+
+
+def test_recommend_review_scored_returns_concept_ratio_pairs_in_recommend_review_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Mostly solid", domain="classical-ml", confidence=0.1, days_ago=5)
+    insert_mistake_at("Very shaky", domain="classical-ml", confidence=0.9, days_ago=5)
+
+    scored = recommend_review_scored("classical-ml")
+
+    assert [concept for concept, _ in scored] == recommend_review("classical-ml")
+    ratios = [ratio for _, ratio in scored]
+    assert ratios == sorted(ratios, reverse=True)
+
+
+def test_recommend_review_scored_no_data_returns_empty_list(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    assert recommend_review_scored() == []
+
+
+def test_recommend_review_prioritizes_longer_since_last_review_at_equal_understanding(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Reviewed today", domain="classical-ml", confidence=0.5, days_ago=0)
+    insert_mistake_at("Reviewed two weeks ago", domain="classical-ml", confidence=0.5, days_ago=14)
+
+    assert recommend_review("classical-ml") == ["Reviewed two weeks ago", "Reviewed today"]
+
+
+def test_recommend_review_long_overdue_well_understood_outranks_recent_weak(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    # Well understood (confidence 0.05 -> understanding 0.95, ~13.35-day interval)
+    # but last reviewed 20 days ago: overdue_ratio ~= 1.5.
+    insert_mistake_at("Well understood, long overdue", domain="classical-ml", confidence=0.05, days_ago=20)
+    # Weakly understood (confidence 0.5 -> understanding 0.5, 7.5-day interval)
+    # but reviewed yesterday: overdue_ratio ~= 0.13 -- not actually due yet.
+    insert_mistake_at("Weak but reviewed yesterday", domain="classical-ml", confidence=0.5, days_ago=1)
+
+    # The old "worst raw understanding first" ranking would have put the
+    # weaker concept first regardless of recency -- this is the actual
+    # behavioral change spaced-repetition scheduling is supposed to produce.
+    assert recommend_review("classical-ml") == ["Well understood, long overdue", "Weak but reviewed yesterday"]
+
+
+def test_recommend_domain_picks_least_recently_active_domain(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Touched recently", domain="domain-a", confidence=0.9, days_ago=1)
+    insert_mistake_at("Untouched for ages", domain="domain-b", confidence=0.2, days_ago=30)
+
+    assert recommend_domain() == "domain-b"
+
+
+def test_recommend_domain_uses_each_domains_most_recent_mistake_not_oldest(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    # domain-a's *oldest* entry is old, but it has a fresh one too -- the
+    # domain overall is active, so it shouldn't count as the stalest.
+    insert_mistake_at("Old, superseded", domain="domain-a", confidence=0.9, days_ago=60)
+    insert_mistake_at("Recently reviewed again", domain="domain-a", confidence=0.9, days_ago=1)
+    insert_mistake_at("Only touch in weeks", domain="domain-b", confidence=0.2, days_ago=15)
+
+    assert recommend_domain() == "domain-b"
+
+
+def test_recommend_domain_no_data_returns_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    assert recommend_domain() is None

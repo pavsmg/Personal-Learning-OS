@@ -13,3 +13,11 @@ def get_note(title: str) -> Note | None:
 
 def related_notes(title: str) -> list[NoteSummary]:
     return get_vault_index(get_settings().vault_path).related(title)
+
+
+def concept_importance(title: str) -> int:
+    return get_vault_index(get_settings().vault_path).importance(title)
+
+
+def most_important_notes(limit: int = 20) -> list[NoteSummary]:
+    return get_vault_index(get_settings().vault_path).most_important(limit=limit)

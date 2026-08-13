@@ -28,7 +28,10 @@ has the intended build order; `docs/milestones.md` breaks that into
 checkable tasks and tracks exactly where things stand — check its "Where to
 resume" section at the start of a session, and update it at the end of one,
 even a short one. Don't start implementing steps out of order without
-checking with the user first.
+checking with the user first. Post-MVP work — prompt-rule refinements
+pending a real conversation to confirm, and unscoped planner/architecture
+improvement ideas — lives in `docs/backlog.md`, not `milestones.md`; check
+it too at the start of a session.
 
 ## Working here
 

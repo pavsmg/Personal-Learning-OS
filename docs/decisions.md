@@ -889,3 +889,735 @@ exercised end-to-end over the actual transport a secondary client would
 use, not simulated.
 
 **Status:** Decided (2026-08-11).
+
+---
+
+## 25. System prompt rule 10: disclose ungrounded concepts at the moment of quizzing, not on casual tangents
+
+**Context:** Rule 5 already instructs the model to ground sessions in real
+vault content via `search_notes`/`get_note`/`related_notes`, but nothing
+tells it what to do when those tools come back empty for a concept — it
+could silently answer from training data with the same confident tone as a
+grounded answer, indistinguishable to the learner. Two concrete risks
+this create: (1) no honesty signal when a learner asks about something
+genuinely outside the vault, and (2) if the model then quizzes on and
+corrects that ungrounded concept, a `save_mistake` call could log a
+mistake whose `concept` doesn't match any real vault note title (violating
+rule 3's own stated expectation), polluting `recommend_review`/
+`estimate_mastery`/Career-coaching data with untraceable entries.
+
+**Considered and rejected: disclosing on every ungrounded utterance.**
+Flagging *any* topic outside the vault — including casual tangents ("how
+does this compare to RMSProp?") — was rejected as real, not hypothetical,
+friction: it conflicts with rule 4 (short, conversational, no lecturing)
+and rule 8 (open naturally), and `pedagogy.md`'s own "friction risk"
+section names exactly this failure mode — anything that makes the tool
+feel naggier works against consistency of use, the metric the project's
+own docs identify as the most realistically measurable early win. It would
+also surface false positives often, since `search_notes` is naive
+keyword/token scoring (`decisions.md` #12, no embeddings) — a real vault
+note can fail to surface on off-phrasing, which would make the disclaimer
+fire on content that does exist and teach distrust of the flag itself.
+
+**Decision:** scope the check narrowly. New rule 10 in `prompt.py`: only
+disclose when the model is about to *quiz* (test recall on) a concept —
+not during casual discussion — and `search_notes`/`get_note` returned
+nothing real for it. This is exactly the case where a false "verified"
+signal would corrupt tracked data, so it's where the honesty cost is
+worth paying; casual tangents don't get logged as mistakes either way, so
+they don't need the disclaimer. Also added: never call `save_mistake` for
+a concept flagged this way, closing the rule-3 concept-matching gap
+directly rather than relying on the model to notice the conflict itself.
+
+**Status:** Proposed (2026-08-12) — implemented in `prompt.py`, offline
+test suite passes (128 tests, wiring-level only — nothing here exercises
+real model behavior). Not yet validated against a real conversation the
+way Milestone 5's pedagogy rules were (`decisions.md` entries for M5/M9
+both required a real transcript showing the rule actually fires before
+being called Decided). Needs: a real session where the learner raises a
+concept genuinely absent from the vault mid-session, checked via
+`--debug`/the session log to confirm `search_notes` actually returned
+empty and the model disclosed rather than answered silently.
+
+---
+
+## 26. System prompt rule 11: require an applicative follow-up, not just a correct definition
+
+**Context:** `pedagogy.md`'s own "Realistic goals" section already names this
+as an explicit, accepted scope limit: the system verifies "conceptual
+understanding... not whether \[the learner is] skilled at applying it
+under real, unscripted conditions." Discussed with the user via a YouTube
+video summarizing a popular (not peer-reviewed) taxonomy of thinking
+modes — critical, abstract, applicative, systematic, associative,
+convergent, divergent, lateral, holistic. Cross-checking that taxonomy
+against the current prompt (`prompt.py`) showed the system exercises
+essentially two of the nine (critical thinking via rule 2's
+correct-or-not check; convergent thinking via the same recall-and-confirm
+loop) and nothing that tests **applicative** thinking specifically —
+transferring a correctly-recalled principle to a new situation. That gap
+matches `pedagogy.md`'s own stated limitation exactly, which is what
+made it worth acting on rather than treating as a novel claim from an
+unvetted source.
+
+**Explicitly not treated as evidence:** the video's framework is a
+popular self-development taxonomy, not cited research — unlike
+`pedagogy.md`'s own mechanisms (retrieval practice, spacing, generation
+effect, desirable difficulty, interleaving), which are traceable to real
+learning-science findings. It's used here only as an organizing lens that
+happened to point at a gap the project's own docs had already flagged,
+not as a new evidence source the design now depends on. The taxonomy
+itself is logged as vault note `Modes of Thinking.md` (tagged
+`#transconcept`, matching how the vault already tags cross-domain
+recurring ideas like `Heuristic.md`) for the user's own reference — that
+note is knowledge-base content, not something the system reads at
+runtime.
+
+**Decision:** new rule 11 in `prompt.py`. Once the learner correctly
+explains a concept, the model must follow up at least once with a novel
+scenario requiring application before treating the concept as covered —
+not simply moving to the next item after a correct definition. Scoped as
+a universal rule (not domain-gated) since applying a concept to a new
+case is a generically useful check across every domain this project
+covers, not a language-specific or ML-specific concern.
+
+**Status:** Proposed (2026-08-12) — implemented in `prompt.py`, offline
+test suite passes (131 tests, wiring-level only). Not yet validated
+against a real conversation, same bar as rules 10 (`decisions.md` #25)
+and the Milestone 5/9 pedagogy rules before them. Needs: a real session
+where the learner gives a correct definition, checked (via `--debug`/the
+session log or the transcript itself) for whether the model actually
+poses an application scenario before moving on, rather than accepting the
+definition and pivoting straight to the next concept.
+
+---
+
+## 27. Fix `parse_roadmap` truncating soft-wrapped status lines
+
+**Context:** `language/loader.py`'s `parse_roadmap` matched `ROADMAP.md`
+one physical line at a time via `ROADMAP_LINE_RE`. Real roadmap files
+soft-wrap long status text onto an indented second line (e.g. `- 1.
+Grammar Precision — In progress (adverb/adjective complement pattern` /
+`  surfaced 2026-08-02)`) — the continuation line doesn't match the
+`- N.` entry pattern, so it was silently skipped, truncating the status
+mid-sentence with an unclosed parenthesis. Harmless while `get_curriculum`
+was optional context for the model to glance at; became a real problem
+once `decisions.md` #26/`sessions/service.py`'s planner fix started using
+that output directly as `plan.concepts` in the system prompt.
+
+**Decision:** `parse_roadmap` now tracks the current entry while
+iterating and merges any indented, non-empty line following a matched
+entry into that entry's status text, flushing on the next `- N.` match or
+a blank/unindented line. Verified against the real English `ROADMAP.md`:
+`create_session("ENGLISH ROADMAP")` now produces complete, unclosed-paren-free
+concept strings.
+
+**Status:** Decided (2026-08-12) — 133 tests pass, including two new
+cases (`test_language_loader.py`): joining a soft-wrapped continuation,
+and confirming an unindented trailing paragraph after the list doesn't
+get merged in. Verified against real data, not just the synthetic
+fixture.
+
+---
+
+## 28. Rule 10 refined: Language-Lab-sourced concepts are grounded, not vault-ungrounded
+
+**Context:** First real session with `--debug` on since #25/#26 shipped
+(topic "English"). Real, useful evidence: the planner fix (#26) worked —
+the opening question came from a curriculum-sourced concept (`Vocabulary
+Precision & False Friends`), not a generic vault note title — and rule 10
+fired for the first time ever, disclosing honestly when asked for an
+example. But the transcript also showed *why* it fired: the model called
+`get_note` using the mistake-tracking label itself
+(`'"capacities" used where "capabilities" is meant'`) as if it were a
+vault note title. Confirmed against the real vault — no such note exists,
+never will, because that label comes from `mistakes.db`/Language-Lab, not
+the vault. So the `null` and the resulting "I don't have notes on that in
+your vault" were technically true but misleading: the same session had
+just opened by citing this *exact* tracked pattern via
+`get_recent_mistakes`. Rule 10 (and rule 5, which pushes toward vault
+grounding in the first place) were written assuming every "concept" is
+vault-shaped — the planner fix in #26 broke that assumption on purpose,
+and neither rule was updated to know the difference.
+
+**Decision:** rule 5 now names the source explicitly per domain type —
+vault tools for vault-anchored domains, rule 9's Language-Lab tools for
+language domains — and states plainly that a curriculum/mistake label was
+never going to match a vault note, so don't try. Rule 10 gets an explicit
+carve-out: concepts already grounded via `get_language_profile`/
+`get_curriculum`/`get_recent_mistakes` are real tracked data, not
+vault-ungrounded, and shouldn't trigger the disclosure or a `get_note`
+lookup at all.
+
+**Status:** Proposed (2026-08-12) — same bar as #25/#26: this specific
+wording hasn't been re-run against a real conversation yet. The
+underlying honesty *mechanism* rule 10 implements is validated (it fired
+correctly, on real evidence, in the session that exposed this gap) — but
+this exact refined wording needs its own real check: a future English/
+Language-Lab session should confirm the model no longer calls `get_note`
+on a curriculum/mistake label, and doesn't disclose a vault gap for
+concepts it already has real tracked data on.
+
+---
+
+## 29. Rule 1 amended: stop reformulating "how would you explain X" after the learner says they don't know
+
+**Context:** Same real transcript that produced #28. After the learner
+said "I really don't know the difference" between capacities/
+capabilities, the model asked a reworded version of the same question
+("in a sentence about an AI, would you say...") instead of explaining.
+When the learner then explicitly asked "can you give an example to
+distinguish the two?", the model still hadn't explained by the point the
+transcript ended. User feedback, directly: this is "limiting and
+honestly frustrating," and correctly identified the mechanism — rule 1
+said "ask before you explain," full stop, with no exit condition for a
+learner who has already told you they don't know. Retrieval practice (the
+evidence `pedagogy.md` cites for ask-before-tell) only strengthens
+material already encoded; it has nothing to operate on when the learner
+has zero prior exposure to a specific vocabulary distinction. Continuing
+to probe past an honest "I don't know" isn't testing recall, it's just
+friction — and the user's broader point holds: vocabulary distinctions
+especially can't be reasoned out from first principles the way a
+mechanism (gradient descent, Adam) sometimes can; forcing guesswork at
+an arbitrary word pair doesn't teach anything a direct explanation
+wouldn't teach faster and more honestly.
+
+**Decision:** rule 1 now treats "ask before tell" as one attempt, not a
+loop. The first time the learner directly signals they don't know, the
+model must stop reformulating and give a short, direct explanation
+(ideally with a contrasting example) instead. Scoped as universal
+(applies to any domain, not just language/vocabulary) since the
+underlying problem — forcing production from someone with nothing to
+produce from — isn't specific to vocabulary, though vocabulary is named
+explicitly as the clearest case, per the user's own framing.
+
+**Status:** Proposed (2026-08-12) — implemented in `prompt.py`, offline
+suite passes (133 tests, wiring-level only). Needs a real re-run of a
+similar scenario (a genuine "I don't know" on something the learner has
+no prior exposure to) to confirm the model actually explains after one
+signal instead of continuing to probe, same bar as #25/#26/#28.
+
+---
+
+## 30. Rule 5 amended: word-level vocabulary doesn't require a note or tracked entry to exist
+
+**Context:** #29 fixed the *looping* symptom (ask-before-tell with no
+exit), but the user pushed further, correctly identifying a second,
+separate bug underneath it: rule 5 still framed grounding as something
+every concept needs before the model can talk about it — a note for
+vault domains, a Language-Lab entry for language domains. That's the
+wrong model specifically for word-level vocabulary. In the user's own
+words: "the vault's intention is never to be filled as if it was a
+dictionary," and Language-Lab's tracked mistakes are only the subset of
+vocabulary that has already surfaced as an error, not the full space of
+words a learner might ask about. Requiring retrieval before explaining a
+specific word pair means either (a) the model stalls or discloses a gap
+for something it can already explain correctly from general knowledge, or
+(b) the vault would need to grow a dedicated note per word to satisfy the
+rule — exactly the "endless notes... to revolve around one word" the user
+flagged as absurd. Distinct from #28: #28 fixed *disclosing* a false gap
+for concepts genuinely already tracked elsewhere; this fixes the prior
+assumption that word-level vocabulary needs to be tracked anywhere at all
+before it can be explained.
+
+**Decision:** rule 5 now states explicitly that it governs the session's
+overall concepts, not every specific word raised inside one — a
+vocabulary distinction doesn't need a note or tracked entry to exist
+first; general language knowledge is the expected source for those, and
+the model should explain directly rather than trying to retrieve or
+disclose a gap. Rule 10 needed no further change: it was already scoped
+to vault-anchored concepts only (per #28), so it was never firing on
+language-domain vocabulary in the first place — the gap was entirely in
+rule 5's implicit "ground everything" framing.
+
+**Status:** Proposed (2026-08-12) — offline suite passes (133 tests).
+Needs a real re-run: a fresh, previously-untracked vocabulary question in
+a language session should get a direct explanation with no retrieval
+attempt and no "I don't have notes on that" disclosure, same bar as
+#25/#26/#28/#29.
+
+---
+
+## 31. Session planner: language-specific domain inference and curriculum-sourced concepts
+
+**Context:** User reported a real, concrete pedagogy complaint: an
+automatic-mode session opened by asking "how many letters does Turkish
+have," which felt irrelevant to actually learning a language. Diagnosis,
+via `--debug`: two stacked bugs. (1) `_infer_domain` derived domain from
+a vault note's generic `#languages` tag rather than the specific
+language, so a Turkish mistake was tagged domain `languages` — meaning
+`get_language_profile("Turkish")`/`get_curriculum("Turkish")` could never
+see it, and vice versa (this is the gap `decisions.md` #23 had already
+named but never fixed). (2) `create_session`'s anchor+`related_notes`
+heuristic treats every vault note title as an equally valid quiz target,
+with no way to distinguish a reference note (`Turkish alphabet.md` — a
+letter chart) from an actual practicable concept.
+
+**Decision:** `_infer_domain` (`sessions/service.py`) now checks the
+anchor note's title against the four tracked languages (`LANGUAGES`,
+moved to `language/service.py` so both modules can share it) before
+falling back to the generic tag. `create_session` sources `plan.concepts`
+from `get_curriculum(language)` when real structured curriculum data
+exists for that language, falling back to the original vault
+anchor+`related_notes` heuristic when it doesn't (an honest "nothing
+tracked yet" state, not a bug — Turkish's `ROADMAP.md` is still
+unstructured prose as of this writing).
+
+**Status:** Decided (2026-08-12) — validated twice over: structurally,
+against real vault + Language-Lab data (3 new tests in
+`test_sessions_service.py`; confirmed via direct script that
+`create_session("Turkish alphabet")` now resolves `domain="turkish"`, and
+`create_session("ENGLISH ROADMAP")` sources concepts from real curriculum
+status); and behaviorally, in the real "English" session that later
+exposed #28's finding — the opening question was genuinely
+curriculum-sourced (`Vocabulary Precision & False Friends`), not a
+generic vault note title. **Note:** implemented and tested earlier in
+this same working session but not logged here at the time — added
+retroactively while setting up `backlog.md`, per this doc's own rule that
+every nontrivial choice gets an entry.
+
+---
+
+## 32. Real spaced-repetition scheduling for `recommend_review`
+
+**Context:** First item off `backlog.md`'s improvement-ideas list.
+`recommend_review` ranked purely by `1 - average(confidence)` — the
+single worst-understood concept, globally, forever — despite
+`MistakeEntry.timestamp` being recorded on every `save_mistake` call and
+never read anywhere. `pedagogy.md` already claims spaced repetition is
+implemented ("a spaced-repetition scheduler in different clothing"); it
+wasn't, in the one place that actually drives what gets reviewed.
+
+**Decision:** naive v1 interval model — `_review_interval_days` maps
+understanding linearly onto 1–14 days (poorly understood → reviewed
+again almost immediately; well understood → long gap). `_overdue_ratio`
+divides real elapsed time by that interval: >1 means overdue, <1 means
+not due yet, and the ratio itself (not a due/not-due split) is the sort
+key, so a long-overdue well-understood concept can still outrank a
+barely-overdue poorly-understood one — real spaced-repetition semantics,
+not just "worst score wins." Concepts tied on urgency (most commonly:
+several mistakes saved in the same real session, seconds apart) fall back
+to raw understanding, worst first — the previous ranking, now demoted to
+a tiebreak rather than the primary signal. `recommend_review` still
+returns every tracked concept, just reordered — no filtering to
+"due-only," so automatic-mode session planning doesn't start erroring
+just because nothing is strictly overdue yet.
+
+**Real bug caught during implementation, not just in review:** the first
+version used raw (unrounded) elapsed time in the ratio. Two mistakes
+saved seconds apart — the ordinary case, e.g. several corrections in one
+session — got near-zero but essentially random relative orderings from
+wall-clock/floating-point noise, which flipped the sign of an existing
+passing test (`test_recommend_review_sorts_worst_first`) nondeterministically
+between runs. Fixed by rounding `days_since` to the nearest whole day
+before computing the ratio, so same-day entries genuinely tie instead of
+racing — confirmed stable across 5 repeated real runs of the full test
+file after the fix, not just a single passing run.
+
+**Status:** Decided (2026-08-13) — 135 tests pass (2 new: equal
+understanding at different recency ranks the older one first; a
+long-overdue well-understood concept outranks a barely-overdue weak one,
+the actual behavioral change this fix is supposed to produce). Verified
+against the real `mistakes.db`: `Optimizer` (very well understood,
+2 days old) and `"capacities" used where "capabilities" is meant`
+(reviewed twice minutes ago) both correctly dropped toward the bottom of
+`recommend_review()`'s real output, despite being tracked concepts,
+because they're not actually due yet — the previous algorithm would have
+ranked purely by confidence and ignored that entirely. This is a scheduling
+fix, not a claim about live model behavior, so no real-conversation
+recheck is needed the way prompt-rule changes require.
+
+---
+
+## 33. Domain-aware automatic mode: `recommend_domain()`
+
+**Context:** Second item off `backlog.md`. Automatic-mode topic selection
+(`create_session(topic=None)`) called `recommend_review()` with no domain
+filter — a single global top-1 pick across every concept in every domain.
+Even after #32's spacing fix, this has a real, distinct fairness gap: a
+concept's `_overdue_ratio` is relative to its *own* interval, not an
+absolute cross-domain urgency measure. A domain of consistently
+hard-to-grasp concepts has structurally short intervals and will keep
+generating fresh, quickly-recurring high ratios; a domain of easier
+concepts has structurally longer intervals and takes proportionally
+longer to climb back above 1.0 even when it's genuinely gone unreviewed —
+biasing automatic mode toward "hard domains" or frequently-revisited
+concepts specifically, not toward whichever domain has actually been
+neglected the longest.
+
+**Decision:** new `recommend_domain()` in `mistakes/service.py`,
+completely independent of the ratio math: groups all mistakes by domain,
+takes each domain's single *most recent* mistake timestamp (not its
+oldest — a domain with one stale concept and one freshly-touched concept
+is still an active domain), and returns whichever domain's most-recent
+timestamp is furthest in the past. `create_session`'s automatic-mode
+branch now calls `recommend_review(domain=recommend_domain())` instead of
+`recommend_review()` unfiltered — domain chosen first, then that domain's
+own top concept per #32's ranking. Returns `None` (not an error) when
+there's no mistake data at all yet, same contract shape as
+`recommend_review`.
+
+**Status:** Decided (2026-08-13) — 139 tests pass (3 new in
+`test_mistakes_service.py`: picks the staler of two domains; correctly
+uses each domain's most-recent entry rather than its oldest; returns
+`None` on no data — plus 1 in `test_sessions_service.py` proving the
+actual planner-level behavior change: a domain whose top concept has a
+*lower* raw overdue ratio still wins automatic mode when its domain has
+gone untouched far longer than the higher-ratio domain). Verified against
+the real `mistakes.db`: `recommend_domain()` picks `languages` (one
+entry, aging quietly since 2026-08-11) over `english` (actively reviewed
+as recently as today) — the exact fairness outcome this was built for.
+Scheduling logic, not a live-model-behavior claim, so no real-conversation
+recheck needed.
+
+---
+
+## 34. Rank `related_notes` by link type, not alphabetically
+
+**Context:** Third item off `backlog.md`. `VaultIndex.related()`
+returned the union of outgoing links and backlinks as one flat
+alphabetically-sorted list, with no notion of which neighbor actually
+mattered more — `create_session`'s fallback path (still the only concept
+source for every non-language domain) takes the first `max_concepts - 1`
+of whatever that list returns, so alphabetical accident directly decided
+what got quizzed on. Surfaced concretely discussing a real "start a
+session on TCP" scenario: `related_notes("TCP")` returns **20** notes on
+the real vault (TCP is a hub, not a leaf) — `create_session` would have
+anchored on `FTP` and `Linux Networking` (alphabetically first) over
+`Handshake`/`UDP` (TCP's own direct, author-curated links), which are
+obviously more central to actually understanding TCP.
+
+**Decision:** `related()` now ranks in three tiers, using graph structure
+already present, no new tracking: **mutual** links (in both the note's
+outgoing links and its backlinks) first — the strongest real signal of
+conceptual coupling; **outgoing-only** next — the note's own author
+deliberately linked out to it; **incoming-only** last — something else
+mentions this note, which for a well-connected hub can mean a broad
+index-style note linking to dozens of unrelated things, not a sign of
+real relevance to *this* note. Alphabetical within each tier for
+determinism.
+
+**Status:** Decided (2026-08-13) — 141 tests pass (2 new in
+`test_retrieval_index.py`: tier ordering with a synthetic mutual/
+outgoing-only/incoming-only graph; alphabetical-within-tier). Verified
+against the real vault: `related_notes("TCP")` now returns `Handshake`,
+`packet switching`, `TCP-IP`, `UDP` (TCP's real, direct associations)
+ahead of `FTP`/`Linux Networking`, which is the actual behavioral change
+this was built for. Pure ranking logic, no live-model-behavior claim, so
+no real-conversation recheck needed.
+
+**Separate bug found during validation, not fixed here, logged instead:**
+`create_session("TCP")` anchors on `TCP-IP`, not `TCP` — `search()`'s
+`EXACT_TITLE_BONUS` check is `query_lower in title.lower()`, a substring
+test, so "TCP" gets the *same* full exact-match bonus against "TCP-IP" as
+against "TCP" itself, and "TCP-IP" then wins on body-token tiebreaks.
+Orthogonal to `related()`'s ranking (this is in `search()`, over anchor
+*selection*, not neighbor ranking within an already-chosen anchor) — not
+in scope for this fix. Added to `backlog.md`.
+
+---
+
+## 35. Rule 5: grounding applies to mid-conversation concepts too, not just the planned list
+
+**Context:** Discussing a real "start a session on TCP" scenario
+surfaced that rule 5's wording — "ground... before quizzing on a
+concept" — never actually said whether that covers a concept the learner
+raises spontaneously (e.g., bringing up UDP mid-TCP-session) or only the
+concepts baked into `plan.concepts` at session start. In practice this
+mostly already worked, since `search_notes`/`get_note`/`related_notes`
+are live tools available every turn, not gated to planning time — but the
+rule's *text* left it to interpretation. Given rules 1/10/11 all turned
+out to have real gaps traced to exactly this kind of unstated scope, this
+one was closed proactively rather than waiting for a transcript to expose
+it.
+
+**Decision:** rule 5 now states explicitly that grounding applies to any
+concept about to be quizzed on, planned or not — a mid-conversation
+detour into a related idea needs the same `search_notes`/`get_note`/
+`related_notes` grounding as anything on today's list, not an implicit
+exemption for being unplanned. Doesn't touch rule 5's existing vocabulary
+carve-out (#30) — vocabulary distinctions still don't require grounding
+regardless of when they come up; this clause is only about conceptual/
+domain content raised outside the original plan.
+
+**Status:** Proposed (2026-08-13) — 141 tests pass (wiring-level only).
+Needs a real session: bring up a related-but-unplanned concept
+mid-conversation and confirm, via `--debug`/the session log, that the
+model actually calls the grounding tools for it before quizzing, rather
+than answering from general knowledge just because it wasn't on the
+original list.
+
+---
+
+## 36. Replace naive keyword scoring in `search_notes` with BM25
+
+**Context:** Before patching the known substring-vs-equality bug in
+`EXACT_TITLE_BONUS` (found validating #34), took a wider look at whether
+`search()`'s scoring was improvable rather than just fixing the one bug.
+It was — real numbers, not just theory: `TCP.md` (846 chars, "tcp" ×3)
+scored *below* `TCP-IP.md` (4171 chars, "tcp" ×9) even discounting the
+bonus bug, because raw body-token counts have zero length normalization —
+a long, broad note systematically outranks a short, precise one. Also
+confirmed no IDF: searching "transport layer" let `TCP-IP` creep into
+rank #2 partly because "layer" is common across 60 of 1520 notes and
+scored the same per-occurrence as a rare, distinctive term.
+
+**Decision:** replaced the naive weighted-count scorer with BM25 computed
+independently per field (title, body — not full BM25F's combined
+cross-field pseudo-frequency, a deliberate simplification), combined with
+the existing field-importance weights (`TITLE_WEIGHT`/`BODY_WEIGHT`/
+`TAG_WEIGHT` unchanged in value — they're relative-importance ratios
+between fields, not scale-dependent, so they carry over). Standard
+textbook BM25 parameters (`k1=1.5`, `b=0.75`), not vault-tuned —
+deliberately adopting a real, well-understood formula instead of more
+hand-picked magic numbers. `EXACT_TITLE_BONUS` now requires true title
+equality, not `query in title` substring containment (the originally
+found bug) — kept as a small additional signal on top of BM25 rather than
+removed, since BM25's own title-field scoring already favors short,
+closely-matching titles fairly strongly on its own once length
+normalization is correct.
+
+**Why per-field BM25 instead of full BM25F:** full BM25F combines
+per-field term frequencies into one pseudo-frequency before applying a
+single IDF; independent per-field BM25 (each field with its own IDF and
+length normalization) is simpler to reason about, test, and tune, at the
+cost of not being the textbook-exact multi-field formula. A defensible,
+documented simplification, not an accidental one.
+
+**Considered and deferred, not rejected: embeddings/semantic search.**
+Already named as future work in #12. BM25 fixes the two concretely
+identified problems (length normalization, IDF) without a new dependency
+or ongoing embedding cost; embeddings would additionally solve
+different-wording-same-meaning queries that no lexical scorer can (a
+query using none of a note's actual words), which BM25 does not and
+cannot fix — a genuinely separate capability, not a strictly-better
+version of the same thing, and a bigger standalone decision than this one
+warranted.
+
+**Status:** Decided (2026-08-13) — 144 tests pass (3 new: exact-equality
+beats substring-title match; length normalization favors a short focused
+note over a long diluted one with more raw occurrences; IDF favors a rare
+term over a common one at equal term-frequency/length). Verified against
+the real vault: `search("TCP")` now ranks `TCP` above `TCP-IP` (the
+original bug); `search("transport layer")` no longer surfaces `TCP-IP` in
+the top 5 at all (previously rank #2); `create_session("TCP")` now
+correctly anchors on `TCP` itself and produces
+`['TCP', 'Handshake', 'packet switching', 'TCP-IP', 'UDP']` — the exact
+sensible neighborhood from the original TCP discussion, combining this
+fix with #34's tiered `related()` ranking. Pure ranking/retrieval logic,
+no live-model-behavior claim, so no real-conversation recheck needed.
+
+---
+
+## 37. Weighted-graph centrality: in-degree as a foundational-ness signal, first application (blind-spot cold start)
+
+**Context:** User's idea from earlier in this session, logged in
+`backlog.md`: the more a vault note is pointed at, the more foundational
+it likely is — naive in-degree centrality. Flagged at the time as needing
+its own scoping discussion (where it plugs in, how normalized) before
+building, since several applications were named without picking one.
+
+**Decision — the core primitive:** `VaultIndex.most_important(limit)` in
+`retrieval/index.py`, ranking notes by backlink count descending. Pure
+aggregation over `_backlinks`, already built at index time — no new
+indexing pass, matching the original idea's own observation that this is
+cheap. Deliberately backlinks only, not outgoing links too: the actual
+claim is about being pointed at, not about how much a note itself
+references elsewhere. Exposed via `retrieval/service.py`'s
+`most_important_notes` and exported from `learning_os.retrieval`,
+matching the existing `search_notes`/`get_note`/`related_notes` pattern.
+
+**Decision — first application, picked over the other three named
+in `backlog.md`:** a cold-start fallback for `create_session`'s automatic
+mode. Previously, zero mistakes tracked anywhere meant an immediate
+`ValueError` ("name a topic explicitly") — a real dead end for a fresh
+install or a completely untouched domain. `_find_blind_spot_topic`
+(`sessions/service.py`) now scans the top 20 most-important vault notes
+for the first one with zero entries in `get_learning_profile()` (i.e.
+never tracked as a mistake, in any domain) and offers that instead,
+before falling through to the existing error. Objective phrasing
+distinguishes this from a real "due for review" pick: "Explore {topic} —
+a foundational concept not yet reviewed." The other three applications
+named in `backlog.md` (tiebreak within `related()`'s tiers; a priority
+layer on top of #32/#33 for competing overdue concepts; weighting
+Career/CV strength toward hub concepts) remain unbuilt, left in
+`backlog.md` — this primitive supports all of them without committing to
+which comes next.
+
+**Real, non-obvious finding while testing:** `_find_blind_spot_topic`'s
+own "all candidates already tracked" branch turns out to be
+mathematically unreachable through `create_session` — `recommend_domain`/
+`recommend_review` only return empty when the *entire* mistakes table is
+empty, which is exactly the one condition under which
+`_find_blind_spot_topic` gets called at all, so `get_learning_profile()`
+inside it is always querying an empty table in that calling context. The
+branch is still correct, real behavior of the helper in isolation (worth
+keeping — it's not called only from here, and its own contract should be
+correct regardless of caller), but had to be tested by importing
+`_find_blind_spot_topic` directly rather than through `create_session`,
+since the integration path can never actually reach it.
+
+**Status:** Decided (2026-08-13) — 149 tests pass (6 new: `most_important`
+ranks by backlink count / respects limit / handles an empty vault;
+`create_session` falls back to the blind-spot pick with the right
+objective wording when nothing's tracked; `_find_blind_spot_topic`
+returns `None` directly when all candidates are already tracked). Verified
+against the real vault: top-10 most-important notes are genuinely
+foundational hub concepts across multiple domains (`HTTP`,
+`Machine Learning`, `operating system`, `Big O notation`, `kernel`,
+`router`, `Chemical Reaction`, `NLP`, ...), not noise; `_find_blind_spot_topic()`
+called directly against the real `mistakes.db` correctly picks `HTTP` —
+the most-important real note that happens to have zero tracked mistakes
+today. The known raw-in-degree tradeoff from the original backlog note
+(conflating "foundational" with "generic and overused") still applies and
+is unresolved — PageRank-style recursive weighting remains the named fix
+if that proves to matter in practice, same as before.
+
+---
+
+## 38. Importance-based tiebreak within `related()`'s tiers
+
+**Context:** Second application of #37's centrality primitive, and the
+first of the three `backlog.md` named as still open after #37. `related()`
+already ranks into three tiers (mutual/outgoing-only/incoming-only, #34),
+but fell back to plain alphabetical order within each — for a
+well-connected hub note with many same-tier neighbors, the neighbor
+surfaced first was arbitrary rather than the one actually most central to
+the vault.
+
+**Decision:** added `VaultIndex._importance(key)`, a thin wrapper around
+the backlink-count expression `most_important` already computed inline —
+shared now across 4 call sites (3 in `related()`, 1 in `most_important`,
+refactored to use it too) so the two rankings can't silently drift apart.
+`related()`'s three tier sorts now use `(-importance, key)` as their sort
+key — same tuple idiom `most_important` already used — instead of plain
+alphabetical. Tier order itself is unchanged, only the ordering within
+each tier.
+
+**Status:** Decided (2026-08-13) — planned in plan mode (2 Explore/Plan
+subagent passes confirming exact current code and tracing test impact
+before writing anything), then implemented exactly as planned. 150 tests
+pass (1 new: two same-tier candidates where the alphabetically-later one
+has strictly more backlinks now correctly ranks first — a real behavior
+change no prior test could have caught). Verified against the real vault:
+`related("TCP")`'s mutual tier flips from `Handshake, packet switching,
+TCP-IP, UDP` to `TCP-IP, Handshake, UDP, packet switching`, matching a
+hand-computed expected order exactly; `most_important(limit=10)`'s output
+confirmed unchanged after the `_importance` refactor (pure dedup, no
+behavior change there). Pure ranking logic, no live-model-behavior claim,
+so no real-conversation recheck needed.
+
+---
+
+## 39. Priority layer: vault importance as a tiebreak on top of spaced-repetition urgency
+
+**Context:** Last-but-one remaining application of the centrality
+primitive (#37/#38) named in `backlog.md`: "a priority signal layered on
+top of #32/#33 for which concept within an already-overdue domain is
+most worth consolidating first." Planned in plan mode, with two
+Explore/Plan subagent passes confirming exact current code before writing
+anything, since this one touched a genuine architectural fork.
+
+**Architecture decision:** `recommend_review` is one of the 18 registered
+model-facing tools (`tools.md`) — the model can call it directly
+mid-conversation. Blending importance into it directly would mean
+`mistakes/service.py` importing `learning_os.retrieval` (confirmed no
+circular-import risk either direction, but `architecture.md` frames these
+as deliberately separate, swappable modules) and would silently change a
+documented tool's live behavior with no stated expectation of it.
+Decided: keep `recommend_review`'s contract and output byte-for-byte
+unchanged. Added `recommend_review_scored` (`mistakes/service.py`) — same
+ranking, with each concept's raw `_overdue_ratio` attached — and made
+`recommend_review` a thin wrapper over it. The actual importance-blending
+(`_prioritize_by_importance`, new `OVERDUE_TIE_BUCKET_SIZE` constant) lives
+in `sessions/service.py`, consistent with where `_language_concepts`
+(#31) and `_find_blind_spot_topic` (#37) already do cross-cutting planner
+logic rather than reaching into the lower modules. New
+`VaultIndex.importance(title)`/`concept_importance` (public single-note
+counterpart to `most_important`) returns 0 for a concept that isn't a
+real vault note title, rather than erroring — handles the real, common
+case (6 of 10 tracked concepts today are freeform language-mistake
+descriptions, not vault titles) with no special-casing needed by callers.
+
+**Decision — the tiebreak mechanism:** concepts whose `_overdue_ratio`
+rounds to the same `OVERDUE_TIE_BUCKET_SIZE=0.25`-wide bucket are
+re-ranked by backlink count; Python's stable sort keeps
+`recommend_review_scored`'s own urgency/understanding order as the
+tiebreak beneath that. A genuine urgency gap (different bucket) is never
+overridden by importance, regardless of how foundational either concept
+is. `0.25` is a naive-v1 constant in the same spirit as
+`MIN`/`MAX_REVIEW_INTERVAL_DAYS`/`BM25_K1` elsewhere — not tuned against
+real data, a defensible starting point.
+
+**Real-data limit, confirmed directly, stated plainly rather than
+implied away:** the only domain with 2+ tracked concepts today
+(`classical-ml`: `Adam optimizer` ratio 1.047, `Optimizer` ratio 0.166 —
+0.88 apart, several buckets under the scheme above, and tied on
+importance at 2 backlinks each regardless) does not exercise this
+feature. Re-running the full real pipeline confirms
+`_prioritize_by_importance` is a no-op on both real domains checked
+(`languages` has one concept; `classical-ml`'s gap is genuine, not close)
+— `create_session(topic=None)`'s pick is unchanged today. This is an
+honest data-shape fact, not a bug: no pair of concepts in the current
+`mistakes.db` both share an overdue bucket and differ in importance.
+
+**Status:** Decided (2026-08-13) — 161 tests pass (11 new: `recommend_review_scored`
+parity with `recommend_review` plus empty-case; `importance()`'s three
+cases in `retrieval/index.py`; four `_prioritize_by_importance`/
+`create_session` tests proving the actual behavior change synthetically
+— same-bucket concepts re-ranked by importance, a genuine urgency gap
+never overridden, unresolved concepts get importance 0 and keep relative
+order, and an end-to-end `create_session` case with synthetic timestamps
+mirroring #32/#33's own validation pattern; two real-vault
+`concept_importance` checks). Verified against the real vault/DB as
+described above. Live-model-behavior claim only insofar as
+`recommend_review`'s tool contract was checked to be unchanged (confirmed
+by the existing test suite passing unmodified) — the new
+`_prioritize_by_importance` logic is pure backend ranking, not a prompt
+change, so no real-conversation recheck is needed.
+
+---
+
+## 40. Career/CV summary weighted toward demonstrated mastery of hub concepts
+
+**Context:** Last remaining application of the centrality primitive named
+in `backlog.md`. `summarize_skills_for_cv` sent every qualifying strength
+to the LLM with no notion of which was more foundational — a demonstrated
+strength in something central to the vault (e.g. `Optimizer`) read no
+differently from one in something peripheral.
+
+**Scoping decision:** applied to `summarize_skills_for_cv` only, not
+`analyze_job_fit`, despite both being registered Career tools
+(`tools.md`). Job-fit matching should reflect relevance to *that specific
+job*, not general vault centrality — a job can genuinely need a niche
+skill that isn't foundational to this vault at all, so blending
+vault-wide importance into job matching would be the wrong signal there.
+Confirmed by a new regression test that `analyze_job_fit`'s prompt
+contains no `vault_importance` field.
+
+**Decision:** `career/service.py`'s `summarize_skills_for_cv` computes
+`concept_importance` (#39's primitive) per qualifying strength, sorts
+strengths by it descending, and passes an importance dict through to
+`career/prompt.py`'s `build_cv_summary_prompt`/`_format_profile`, which
+now render a `vault_importance=N` field per line and instruct the model
+to lead with and emphasize higher-importance concepts within each domain
+— explicitly *not* to drop a genuine niche strength for having low
+importance, only to not lead with it. Concepts that aren't real vault
+note titles get importance 0 and simply sort last, no special-casing
+needed (same handling as #39). `_format_profile`'s `importance` parameter
+is optional and defaults to omitting the field entirely, so
+`build_job_fit_prompt`'s call site is untouched.
+
+**Status:** Decided for the data-plumbing/prompt-construction logic
+(163 tests pass, 2 new: importance-sort actually reorders — inserted
+importance-ascending, asserted importance-descending in the prompt text
+— and the `analyze_job_fit` regression guard). Verified against the real
+DB/vault: only one real strength currently qualifies (`Optimizer`,
+understanding 0.85, importance 2), so — same honest limitation as #39 —
+there's nothing to visibly reorder today, but the prompt construction was
+confirmed correct against real data end-to-end. **Proposed**, not fully
+Decided, for the actual claim that matters: whether the LLM's summary
+genuinely leads with foundational concepts when several real strengths
+exist. That's a live-model-behavior claim (a prompt-template change) and
+needs a real `summarize_skills_for_cv()` call once enough tracked
+strengths exist to make the ordering visible — added to `backlog.md`'s
+pending-validation list, same bar as the tutoring prompt rules.

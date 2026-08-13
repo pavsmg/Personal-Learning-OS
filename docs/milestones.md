@@ -55,6 +55,12 @@ convenient (config snippet below), not blocking since the protocol layer
 is already validated for real. See `decisions.md` #9–24 for the choices
 made so far.
 
+**Post-MVP work (session planner robustness, prompt-rule refinements,
+anything pending a real conversation to confirm) now lives in
+`backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
+original 12-step build, which is done except for the Milestone 12 item
+above.
+
 ---
 
 ## Milestone 0 — Project setup (prerequisite to `roadmap.md` step 1)
