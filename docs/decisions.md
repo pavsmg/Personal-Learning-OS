@@ -1663,13 +1663,29 @@ rule 5 directly ("Ground the anchor concept per rule 5 first; do this
 before your greeting, not after") instead of staying silent on the
 ordering.
 
-**Status:** Proposed (2026-08-13) — prompt wording changed, existing
-offline suite still passes (163 tests, wiring-level only, same limitation
-as #25/#26/#40: nothing here exercises real model behavior). Needs a
-fresh `--debug` run on a vault-anchored topic confirming `search_notes`/
-`get_note` for the anchor concept now fires before the opening question is
-sent, the same bar #25's rule 10 was held to before being called Decided
-— tracked in `backlog.md`.
+**Status:** Decided (2026-08-15) — **confirmed live**, the same bar #25's
+rule 10 was held to. Two fresh `--debug` runs on vault-anchored topics,
+each exercising only the opening turn (that is the entire claim):
+
+- `TCP` (the topic that originally failed): tool call **#1** is
+  `search_notes("TCP")`, returning the real vault note, followed by
+  `get_recent_mistakes` (rule 7), and only then the opening question
+  "How would you explain TCP in your own words?" — the exact ordering
+  that was inverted before.
+- `Gradient descent` (a topic with tracked mistake history, so rule 7 has
+  something to find): identical pattern — `search_notes` first,
+  `get_recent_mistakes` second, opening question last.
+
+Proposed on 2026-08-13 and confirmed on 2026-08-15; the offline suite
+never could have caught this, since it asserts wiring rather than live
+model behavior.
+
+**Observed during validation, unrelated to this rule:** `create_session("TCP")`
+infers `domain='general'`, because the vault's TCP note carries neither a
+frontmatter `domain:` nor any tags, so `_infer_domain` falls through to
+its default. Mistakes saved in that session would be filed under
+`general` rather than anything networking-shaped, which quietly weakens
+`recommend_domain`'s (#33) per-domain rotation. Logged in `backlog.md`.
 
 ---
 

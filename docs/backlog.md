@@ -54,15 +54,6 @@ rule:
   confirm (via `--debug`/the session log) the model actually calls
   `search_notes`/`get_note`/`related_notes` for it before quizzing,
   instead of treating "not on the original list" as an exemption.
-- **Rule 5 (opening-question grounding)** — `decisions.md` #41. Found
-  failing live: a real `--debug` transcript showed the session's own
-  anchor concept ("TCP") went ungrounded through the opening question and
-  the direct explanation that followed, with `search_notes` only called
-  several turns later when the learner asked for related concepts. Rules
-  5 and 8 were patched to require grounding the anchor concept before the
-  opening question. Check: a fresh `--debug` run on a vault-anchored topic
-  confirms `search_notes`/`get_note` for the anchor concept fires before
-  the opening question is sent, not after.
 - **CV summary vault-importance weighting** — `decisions.md` #40. The
   data plumbing (sort by importance, `vault_importance` field in the
   prompt) is verified against real data; whether the LLM's summary
@@ -105,6 +96,14 @@ Discussion-stage, none of these are scoped or decided yet (opened
   voice-can't-save-mistakes gap (#22) as a side effect. Staged behind
   #43's fix, real session volume, and a `pedagogy.md` section — the
   binding constraint is data, not algorithm.
+
+- [ ] **`_infer_domain` falls through to `general` for untagged notes.**
+  Found while validating #41: the vault's `TCP` note has no frontmatter
+  `domain:` and no tags, so a whole networking session runs as
+  `domain='general'` and any mistake saved in it is filed there. That
+  bucket then competes with real domains in `recommend_domain`'s (#33)
+  rotation. Fixable in the vault (add tags) or in the planner (infer from
+  the note's graph neighbourhood) — undecided which, hence discussion-stage.
 
 ## Improvement ideas — retrieval / knowledge graph
 
