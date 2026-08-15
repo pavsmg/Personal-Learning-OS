@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 
 from learning_os.config import get_settings
+from learning_os.mistakes import archive
 from learning_os.mistakes.models import MistakeEntry
 
 SCHEMA = """
@@ -64,6 +65,10 @@ def insert_mistake(entry: MistakeEntry) -> None:
                 json.dumps(entry.related_notes),
             ),
         )
+
+    # Every write path in the system funnels through here, so this is the one
+    # place the export and backups can be kept honest (decisions.md #46).
+    archive.after_write(query_mistakes(), get_settings().db_path)
 
 
 def query_mistakes(

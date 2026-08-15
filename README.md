@@ -33,6 +33,16 @@ uv run learning-os-voice --debug                 # same, for a voice session
 
 Omit `--debug` for a clean session with no tool-call output.
 
+`mistakes.db` is the only data in this project that git can't recover, so it
+gets a rotating binary backup plus a git-tracked JSON export
+(`docs/decisions.md` #10, #46). Both refresh automatically whenever a mistake
+is saved; run them on demand — or from cron — with:
+
+```sh
+uv run learning-os-backup                # force a backup + refresh the export
+uv run learning-os-backup --export-only  # refresh the export only
+```
+
 Run the test suite (or a single test) with:
 
 ```sh

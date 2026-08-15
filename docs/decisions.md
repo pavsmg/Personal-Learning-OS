@@ -1869,8 +1869,12 @@ copying Anki is even the right target:
 1. **A two-sided `evidence` table**, not a rewrite of `mistakes`:
    `(domain, concept, timestamp, outcome, quality, source, session_id)`.
    Existing mistake rows stay exactly where they are and are read as
-   negative evidence, so #10's git-exported audit trail stays intact and
-   nothing already recorded is destructively migrated.
+   negative evidence, so the export/backup trail stays intact and nothing
+   already recorded is destructively migrated. (Amended 2026-08-15: as
+   first written this sentence claimed #10's git-tracked export as an
+   existing safeguard. It wasn't — #10 was decided and never built. It
+   exists now, as #46; the claim was made true rather than left standing
+   as an assumption.)
 2. **Capture at end of session, in one judged pass — not per turn.**
    Asking the model to call a `save_success` tool on every correct answer
    doubles the burden rule 3 already struggles to enforce. Instead,
@@ -1985,3 +1989,66 @@ number. Verified against the real `mistakes.db`: `Gradient descent`
 (math-foundations) still returns 0.03 and `Optimizer` 0.85, while an
 untracked `TCP` now returns `None` instead of 1.0, serializing to `null`
 for MCP callers.
+
+---
+
+## 46. Building #10's backups and flat-file export, three months after deciding them
+
+**Context:** #10 (2026-08-10) decided SQLite as the live store plus two
+safeguards: periodic backups of the `.db`, and a git-tracked flat-file
+export as a diffable audit trail. Neither was ever built — `grep -ril
+export backend/src/` returned nothing. Surfaced while auditing what else
+is broken, and it was the most serious thing on that list: `mistakes.db`
+is the only artifact in this project git can't recover. The vault lives in
+Obsidian, the code and docs live in git; the mistake history exists in
+exactly one unversioned binary file. #44 then compounded it by citing the
+audit trail as an existing safeguard for a future migration (that sentence
+is now amended in place).
+
+**Decision:** a `mistakes/archive.py` module, with the specifics chosen as
+follows:
+
+- **Paths derive from `db_path`, not from their own settings.** A
+  redirected database — tests, a scratch copy, a second vault — must not
+  be able to write into the real repo's export. Making `export_path()`
+  and `backups_dir()` functions of `db_path` makes that structural rather
+  than a rule to remember: the existing test suite redirects `DB_PATH`
+  already, so every test got correct isolation for free.
+- **JSON, not Markdown.** #10 left the format open ("Markdown/JSON"). JSON
+  round-trips losslessly, so the export is simultaneously the audit trail
+  and a recovery source — every field survives, which a prose rendering
+  would not. Deterministically ordered (timestamp, domain, concept) and
+  `sort_keys=True`, because an audit trail that reorders itself between
+  writes produces diff noise instead of history.
+- **Whole-file rewrite per write**, not append. At tens of rows the cost is
+  nothing and the file is consistent with the database by construction.
+- **`sqlite3`'s native backup API, not `shutil.copy`.** The live connection
+  can be mid-write; only the native API guarantees a consistent snapshot.
+- **Write-triggered but interval-gated** (`BACKUP_INTERVAL`, 1 day,
+  `BACKUPS_TO_KEEP`, 10). No new data means no new backup. Since a
+  write-triggered backup only fires when data changes — which is when a
+  backup is least urgent — `learning-os-backup` exists as the entry point
+  for a real periodic schedule (cron/systemd), which is what #10's word
+  "periodic" actually requires.
+- **Hooked at `store.insert_mistake`**, the single choke point every write
+  path funnels through, rather than at `save_mistake` — so a future writer
+  that bypasses the service layer is still covered.
+- **Failures are swallowed and reported on stderr.** The row is already
+  committed when the archive runs; losing the audit copy is bad, crashing
+  a live tutoring session after the data is safely stored is worse. Silent
+  failure would be worse still, hence the stderr line.
+
+**Status:** Decided (2026-08-15) — 173 tests pass, 9 new, including the
+two that matter most: a backup is reopened as a database and read back
+(proving it's a real snapshot, not a file of plausible size), and a
+forced export failure leaves the mistake committed while printing to
+stderr. Verified for real: `uv run learning-os-backup` exported all 12
+rows of the live `mistakes.db` to `data/mistakes_export.json` and produced
+a working `data/backups/mistakes-20260815T201036Z.db`. `.gitignore`
+already excluded `*.db` and `backups/`, so the export is tracked and the
+binaries aren't, which is exactly #10's intended split.
+
+**Note on what is now in git:** the export contains real mistake content
+(concepts, explanations, timestamps) in a personal repo. That is what #10
+asked for — a human-readable history — but it is worth being aware of
+before this repo is ever shared or made public.

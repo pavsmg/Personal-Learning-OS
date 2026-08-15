@@ -1,0 +1,144 @@
+[
+  {
+    "category": "conceptual confusion",
+    "concept": "Adam optimizer",
+    "confidence": 0.93,
+    "corrected": false,
+    "domain": "classical-ml",
+    "explanation": "Described Adam as 'basically just gradient descent but faster.' The note says Adam is a smarter version of gradient descent with memory of past descent (momentum) and an adaptive learning rate, not merely generic faster gradient descent.",
+    "related_notes": [
+      "Adam optimizer",
+      "Gradient descent",
+      "Optimizer",
+      "Optimizers & Training Mechanics"
+    ],
+    "severity": "medium",
+    "timestamp": "2026-08-11T01:25:06.646482Z"
+  },
+  {
+    "category": "factual error",
+    "concept": "Turkish alphabet",
+    "confidence": 0.98,
+    "corrected": false,
+    "domain": "languages",
+    "explanation": "I said Turkish has 26 letters like English, but the note says Turkish has 29 letters: 8 vowels and 21 consonants.",
+    "related_notes": [
+      "Turkish alphabet"
+    ],
+    "severity": "medium",
+    "timestamp": "2026-08-11T02:11:18.515431Z"
+  },
+  {
+    "category": "conceptual error",
+    "concept": "Gradient descent",
+    "confidence": 0.97,
+    "corrected": false,
+    "domain": "math-foundations",
+    "explanation": "Assumed gradient descent always finds the global minimum. In general, gradient descent may converge to a local minimum or a saddle point depending on the function landscape and initialization.",
+    "related_notes": [
+      "Gradient descent",
+      "Gradient"
+    ],
+    "severity": "medium",
+    "timestamp": "2026-08-11T02:11:37.258572Z"
+  },
+  {
+    "category": "terminology",
+    "concept": "Optimizer",
+    "confidence": 0.15,
+    "corrected": false,
+    "domain": "classical-ml",
+    "explanation": "Learner said optimizer just means Adam specifically; minor terminology imprecision, not a real conceptual gap.",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T02:12:27.671416Z"
+  },
+  {
+    "category": "Grammar",
+    "concept": "adverb used where adjective is needed after \"make + object\"",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "e.g. said \"make it as fluently as possible\" instead of \"make it as fluent as possible\" (\"make\" + object takes an adjective complement describing a resulting state, not an adverb describing manner).",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T05:22:54.713941Z"
+  },
+  {
+    "category": "Grammar",
+    "concept": "redundant \"like\" after \"how\" in sound/appearance questions",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "e.g. asked \"how would it sound like\" (blends \"how would it sound\" and \"what would it sound like\" into an incorrect hybrid).",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T05:22:54.725022Z"
+  },
+  {
+    "category": "Prepositions & Articles",
+    "concept": "\"an\" used before a consonant sound",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "e.g. said \"an conversational agent\" instead of \"a conversational agent\" — a/an choice depends on the following sound, not on the word \"starting a topic\" or similar.",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T05:22:54.733418Z"
+  },
+  {
+    "category": "Vocabulary & False Friends",
+    "concept": "invented non-standard phrasal verbs by blending real ones",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "produced \"brag off\" (blend of \"brag\" and \"show off\"/\"flex\") where standard English just uses \"brag\" or \"brag about it\".",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T05:22:54.741332Z"
+  },
+  {
+    "category": "Vocabulary & False Friends",
+    "concept": "\"capacities\" used where \"capabilities\" is meant",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "asked about an AI's \"capacities\" when asking what it's able to do; English splits these where the source concept (e.g. Spanish \"capacidades\") doesn't — capability = what something can do, capacity = how much it can hold/process.",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-11T05:22:54.748817Z"
+  },
+  {
+    "category": "Idiomatic / Naturalness",
+    "concept": "heavier hesitation/self-correction specifically when explaining complex or abstract ideas",
+    "confidence": 0.4,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "both sessions so far show markedly more filler, restarts, and false starts when explaining the Language-Lab project itself (an abstract, technical topic) versus noticeably smoother speech during simpler exchanges. Not a grammar error, but a real pattern: fluency currently tracks topic complexity more than it tracks the language itself.",
+    "related_notes": [],
+    "severity": "moderate",
+    "timestamp": "2026-08-11T05:22:54.758196Z"
+  },
+  {
+    "category": "Vocabulary & False Friends",
+    "concept": "\"capacities\" used where \"capabilities\" is meant",
+    "confidence": 0.72,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "Learner said they don't know the difference between capacities and capabilities, so the vocabulary distinction is still unresolved and needs direct teaching/practice later.",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-13T02:39:06.293966Z"
+  },
+  {
+    "category": "Vocabulary & False Friends",
+    "concept": "\"capacities\" used where \"capabilities\" is meant",
+    "confidence": 0.64,
+    "corrected": false,
+    "domain": "english",
+    "explanation": "Learner correctly chose 'capabilities' for an AI and recognized the distinction intuitively, but hasn't yet stated the rule clearly. This is closer, but still needs explicit, reliable use in context.",
+    "related_notes": [],
+    "severity": "minor",
+    "timestamp": "2026-08-13T02:42:31.458319Z"
+  }
+]
