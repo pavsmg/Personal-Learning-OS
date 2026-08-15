@@ -1708,3 +1708,84 @@ would just pin the string.
 **Status:** Decided (2026-08-13) — 163 tests pass. Not a
 live-model-behavior claim; it is the instrument the remaining
 live-behavior claims (#41 especially) get checked with.
+
+---
+
+## 43. Session difficulty/duration from tracked evidence, in evidence-scoped vocabulary
+
+**Context:** `backlog.md`'s session-planner item. `target_difficulty` is
+hardcoded `DEFAULT_TARGET_DIFFICULTY = "beginner"` and
+`expected_duration_minutes` is `max(15, 5 × concept_count)` — both flagged
+provisional in Milestone 4 "until Milestone 6 gives mastery data to inform
+them for real". Milestone 6 shipped that data; the planner never came back
+for it.
+
+Scoping it surfaced the reason the item is worth doing at all, and it
+isn't the arithmetic: **neither field has a reader.** They are written in
+`create_session`, declared on `SessionPlan`, and consumed by nothing —
+`build_system_prompt` interpolates `domain`, `objective`, and `concepts`
+only, and `tools.md` doesn't mention either field. Deriving better values
+without wiring them into the prompt would be a no-op with tests attached.
+So the change is two halves, and the second carries the value.
+
+Two properties of the mistake store constrain the mapping:
+
+- `DEFAULT_CONCEPTUAL_UNDERSTANDING = 1.0` means a never-tracked concept
+  scores a *perfect* 1.0. Averaging `estimate_mastery` over a plan's
+  concepts would therefore rate every fresh session as maximally
+  understood, and would invert the blind-spot cold-start path (#37), whose
+  entire purpose is picking a foundational concept with *no* tracked
+  history. "Untracked" has to be its own state, not a high score.
+- The store records only failures. `mistake_count` counts mistakes, and
+  `MistakeEntry.corrected` never flips to `True`, so nothing anywhere
+  records a concept being handled *correctly*. High understanding can only
+  ever mean "old, few, low-confidence mistakes" — never demonstrated
+  success. Evidence is one-sided, and the label has to stay inside what
+  that supports.
+
+**Decision:**
+
+1. **Evidence classes, not an averaged scalar.** One
+   `get_learning_profile(domain)` call classifies each planned concept as
+   `untracked` (absent from the profile), `shaky`, or `settled` (split on
+   `conceptual_understanding`). `target_difficulty` derives from the
+   *tracked* concepts only; with none tracked it keeps today's default,
+   which is the honest answer when there is no evidence either way. Ties
+   lean toward the deeper start, per `pedagogy.md`'s desirable-difficulty
+   point — smooth sessions are the failure mode, not the goal.
+2. **Depth-scoped vocabulary** (`foundational` / `consolidating` /
+   `extending`) replaces `beginner`/`intermediate`/`advanced`.
+   `pedagogy.md`'s "Realistic goals" section requires every mastery/level
+   signal to be scoped to conceptual understanding and to not imply
+   overall competence; "advanced" reads as a competence claim, and given
+   the failures-only store there is no data behind it. The field now names
+   *where to start the questioning*, which is a claim the data can carry.
+3. **Duration stays out of the prompt.** Mastery data sizes it honestly
+   (shaky concepts cost more minutes than settled ones, 15-minute floor
+   kept), and it remains a planning/telemetry value. Putting a minute
+   budget in front of the model invites clock-watching, which pulls
+   directly against rule 2 (resolve the current claim before moving on)
+   and rule 11 (applicative follow-up before a concept counts as covered)
+   — the two rules most recently strengthened, and the ones a rushed
+   session drops first.
+4. **Prompt wiring states where to start, not a level to announce**:
+   foundational opens from mechanism and definitions; extending skips the
+   definition and opens with a rule-11 applicative scenario. Both loops
+   share `build_system_prompt`, so voice inherits this with no separate
+   change — though note voice sessions can't persist mistakes (#22), so
+   voice consumes this evidence without ever generating any.
+
+**Explicit non-goal:** per-concept evidence annotations in the prompt
+(`TCP (3 mistakes tracked)`, `Handshake (no history)`). Probably where the
+real value sits, since a single session-level label flattens a plan whose
+concepts genuinely differ — but it needs a new `SessionPlan` field and a
+`domain-model.md` change, which is a separate decision from the one this
+entry closes. Named here so it doesn't get silently absorbed.
+
+**Status:** Proposed (2026-08-15) — scoped, not yet built. Thresholds will
+be v1 constants stated with their reasoning rather than tuned: today's
+store holds 10 tracked (domain, concept) pairs, 8 of them with a single
+mistake, understanding spanning 0.02–0.85 — enough to sanity-check a
+mapping against (`Gradient descent` at 0.03 must come out foundational),
+nowhere near enough to fit a threshold to, the same position
+`OVERDUE_TIE_BUCKET_SIZE` was in.

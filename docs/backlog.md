@@ -82,7 +82,13 @@ Discussion-stage, none of these are scoped or decided yet (opened
   domain — there's no Language-Lab equivalent for e.g. chemistry, but
   `mistakes.db` already has real per-domain mistake data a non-language
   planner path could lean on instead of pure `related_notes` traversal.
-- [ ] **Feed real mastery data into difficulty/duration.**
+- [ ] **Feed real mastery data into difficulty/duration** — scoped
+  2026-08-15, `decisions.md` #43 (Proposed): evidence classes rather than
+  an averaged scalar (the 1.0 default for untracked concepts makes an
+  average lie), depth-scoped labels instead of beginner/intermediate/
+  advanced, duration sized by evidence but kept out of the prompt. The
+  half that carries the value is that neither field currently has a
+  reader. Not built yet. Original note:
   `target_difficulty` is hardcoded `"beginner"` always;
   `expected_duration_minutes` is purely `5 × concept_count`. Both were
   explicitly flagged as provisional back in Milestone 4 ("until Milestone
