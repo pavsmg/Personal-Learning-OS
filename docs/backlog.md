@@ -88,7 +88,9 @@ Discussion-stage, none of these are scoped or decided yet (opened
   average lie), depth-scoped labels instead of beginner/intermediate/
   advanced, duration sized by evidence but kept out of the prompt. The
   half that carries the value is that neither field currently has a
-  reader. Not built yet. Original note:
+  reader. Not built yet — but its untracked-concept workaround is no
+  longer needed: `estimate_mastery` now reports absence directly
+  (`decisions.md` #45). Original note:
   `target_difficulty` is hardcoded `"beginner"` always;
   `expected_duration_minutes` is purely `5 × concept_count`. Both were
   explicitly flagged as provisional back in Milestone 4 ("until Milestone

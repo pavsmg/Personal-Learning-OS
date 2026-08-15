@@ -1926,3 +1926,62 @@ to do with concepts that get discussed but never actually quizzed — they
 generate no observation of either sign, and treating discussion as
 evidence would reintroduce exactly the fluency-as-understanding error
 `pedagogy.md` warns about.
+
+---
+
+## 45. `estimate_mastery` reports absence of evidence as absence, not as a score
+
+**Context:** Scoping #43 turned up that `DEFAULT_CONCEPTUAL_UNDERSTANDING
+= 1.0` makes a never-tracked concept score as perfectly understood. The
+question raised in review — why not default to 0.0 instead — is answered
+in #44: with a failures-only store, neither number is honest. 1.0 makes
+ignorance look like mastery; 0.0 would rank a never-seen concept *below*
+one that was demonstrably failed (a single failed concept scores
+`1 - 0.4 = 0.6`), and could never rise, because successes are not
+recorded anywhere.
+
+Tracing the call sites narrowed the blast radius well below what the
+constant's prominence suggests. `_conceptual_understanding` has four
+callers, and three of them — `_overdue_ratio`, `get_learning_profile`,
+`recommend_review_scored` — compute from mistakes already grouped by
+concept, so their input is never empty and the default cannot fire.
+Every `MasteryEstimate` in a profile therefore has `mistake_count >= 1`.
+Exactly one path could return the invented value: `estimate_mastery`.
+
+Its reach is also narrower than first stated: `estimate_mastery` is *not*
+in `TUTORING_TOOLS`, so the in-session tutor (text or voice) cannot call
+it. It reaches callers through the tool registry — the MCP server's 18
+tools (#24), so a Claude Desktop/Code client asking "how well do I know
+X?" about anything untracked was the real exposure.
+
+**Decision:** `estimate_mastery` returns `float | None`, with `None` for a
+concept that has no recorded mistakes, documented in its docstring, in the
+registry description the model actually reads, and in `tools.md`.
+`DEFAULT_CONCEPTUAL_UNDERSTANDING` is deleted rather than left unused, and
+`_conceptual_understanding` now raises on an empty list instead of
+silently inventing a value — the three internal callers cannot hit it, and
+the raise is what keeps that property from quietly eroding. This is #44's
+policy point 5 landing early, since it is small and independent of the
+rest of that proposal.
+
+**Deliberately not fixed here, and worth naming:** the whole metric rests
+on `confidence`, a field no one defines for the model. It is absent from
+the tutoring prompt (rule 3 specifies `domain` and `concept` only), from
+the registry description, from `tools.md`, and from `domain-model.md`,
+which lists the field name and nothing more. So the model invents the
+number on every correction, and the formula then reads it as "how much the
+learner does *not* understand" when the name says "how sure the tutor is
+that this was a mistake" — the observer's certainty and the learner's
+deficit are different quantities. Meanwhile `severity`, which is the field
+that would carry magnitude, is written on every row and read by no
+calculation at all. Defining these belongs with #44, where what counts as
+an observation has to be pinned down anyway; fixing it here would change
+what every existing row means without a migration story.
+
+**Status:** Decided (2026-08-15) — 164 tests pass, one rewritten (the old
+test pinned the 1.0 default) and one added, asserting that absence and a
+worst-possible score are distinguishable rather than both reading as a
+number. Verified against the real `mistakes.db`: `Gradient descent`
+(math-foundations) still returns 0.03 and `Optimizer` 0.85, while an
+untracked `TCP` now returns `None` instead of 1.0, serializing to `null`
+for MCP callers.

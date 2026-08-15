@@ -15,7 +15,10 @@ later.
 ## Progression (`domain-model.md`)
 
 - `get_learning_profile`
-- `estimate_mastery`
+- `estimate_mastery` — conceptual understanding of one concept, derived from
+  recorded mistakes only. Returns `null` for a concept with no recorded
+  history: "no evidence yet," which is not the same as understood, and is
+  deliberately not reported as a score (`decisions.md` #45).
 - `recommend_review`
 
 ## Error memory (`domain-model.md`)

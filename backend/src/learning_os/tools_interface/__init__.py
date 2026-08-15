@@ -26,7 +26,13 @@ register(
     "Per-domain, per-concept mastery estimates for the learner.",
     get_learning_profile,
 )
-register("estimate_mastery", "Estimate mastery of a single concept within a domain.", estimate_mastery)
+register(
+    "estimate_mastery",
+    "Estimate conceptual understanding of a single concept within a domain, from recorded "
+    "mistakes only. Returns null when nothing has ever been recorded for it: that means no "
+    "evidence either way, not that the concept is understood.",
+    estimate_mastery,
+)
 register(
     "recommend_review",
     "Recommend concepts worth reviewing, optionally scoped to a domain.",

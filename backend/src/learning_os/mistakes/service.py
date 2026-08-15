@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from learning_os.mistakes import store
 from learning_os.mistakes.models import MasteryEstimate, MistakeEntry
 
-DEFAULT_CONCEPTUAL_UNDERSTANDING = 1.0
 MIN_REVIEW_INTERVAL_DAYS = 1.0
 MAX_REVIEW_INTERVAL_DAYS = 14.0
 
@@ -44,8 +43,14 @@ def get_recent_mistakes(domain: str | None = None, limit: int = 10) -> list[Mist
 
 
 def _conceptual_understanding(mistakes: list[MistakeEntry]) -> float:
+    """Requires at least one recorded mistake. This number reports what the
+    recorded mistakes say, and with none recorded there is nothing for it to
+    say -- so callers that can legitimately have no data report that absence
+    instead of receiving an invented value (decisions.md #45). The three
+    internal callers all compute from mistakes already grouped by concept,
+    so they can never hit this; the raise is here to keep it that way."""
     if not mistakes:
-        return DEFAULT_CONCEPTUAL_UNDERSTANDING
+        raise ValueError("conceptual understanding is undefined with no recorded mistakes")
     average_confidence = sum(m.confidence for m in mistakes) / len(mistakes)
     return max(0.0, min(1.0, 1.0 - average_confidence))
 
@@ -94,8 +99,16 @@ def get_learning_profile(domain: str | None = None) -> list[MasteryEstimate]:
     ]
 
 
-def estimate_mastery(domain: str, concept: str) -> float:
+def estimate_mastery(domain: str, concept: str) -> float | None:
+    """None means "no evidence yet" -- nothing has ever been recorded for this
+    concept -- and is deliberately not a score. The previous 1.0 default was
+    the empty-sum identity of a failures-only metric, which reads as "fully
+    understood" to any caller that doesn't also check mistake_count; 0.0 would
+    have been worse, ranking a never-seen concept below one that was
+    demonstrably failed (decisions.md #45)."""
     mistakes = store.query_mistakes(domain=domain, concept=concept)
+    if not mistakes:
+        return None
     return _conceptual_understanding(mistakes)
 
 

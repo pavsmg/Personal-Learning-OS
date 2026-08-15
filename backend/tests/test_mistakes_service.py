@@ -101,11 +101,32 @@ def test_get_recent_mistakes_filters_by_domain(tmp_path, monkeypatch):
     assert [r.concept for r in results] == ["Vowel Harmony"]
 
 
-def test_estimate_mastery_default_with_no_mistakes(tmp_path, monkeypatch):
+def test_estimate_mastery_reports_absence_with_no_mistakes(tmp_path, monkeypatch):
+    """No evidence is reported as absence, not as a score -- 1.0 read as
+    "fully understood" and 0.0 would rank a never-seen concept below a
+    demonstrably failed one (decisions.md #45)."""
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
 
-    assert estimate_mastery("classical-ml", "Gradient descent") == 1.0
+    assert estimate_mastery("classical-ml", "Gradient descent") is None
+
+
+def test_estimate_mastery_absence_is_distinct_from_a_low_score(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    save_mistake(
+        concept="Gradient descent",
+        explanation="x",
+        category="conceptual",
+        severity="major",
+        confidence=1.0,
+        domain="classical-ml",
+    )
+
+    tracked_and_worst_possible = estimate_mastery("classical-ml", "Gradient descent")
+
+    assert tracked_and_worst_possible == 0.0
+    assert estimate_mastery("classical-ml", "Backpropagation") is None
 
 
 def test_estimate_mastery_reflects_recorded_mistakes(tmp_path, monkeypatch):
