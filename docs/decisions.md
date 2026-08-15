@@ -1621,3 +1621,90 @@ exist. That's a live-model-behavior claim (a prompt-template change) and
 needs a real `summarize_skills_for_cv()` call once enough tracked
 strengths exist to make the ordering visible — added to `backlog.md`'s
 pending-validation list, same bar as the tutoring prompt rules.
+
+---
+
+## 41. Rule 5 gap found live: the session's own anchor concept opened ungrounded
+
+**Context:** A real `learning-os-chat --debug` transcript (topic "TCP",
+2026-08-13) showed the session's only tool call before the opening
+question was `get_recent_mistakes` (rule 7) — no `search_notes`/`get_note`
+call for "TCP" itself, which was both the session's anchor concept
+(`plan.concepts[0]`) and the very thing the opening question ("how would
+you explain TCP in your own words?") quizzed on. The direct explanation
+given two turns later, after the learner signaled "I don't know" twice
+(rule 1), was also delivered with no grounding call preceding it.
+`search_notes("TCP")` was first invoked several turns after that, only
+because the learner explicitly asked for related concepts — at which
+point it returned a real, substantive vault note ("**TCP** (Transmission
+Control Protocol) is a connection-oriented transport-layer protocol...")
+that had been sitting there ungrounded the whole time.
+
+This is a different gap from the two already tracked: not #35 (grounding
+*unplanned* mid-conversation concepts — this was the *planned* one, the
+thing the whole session is built around), and not rule 10 (which only
+fires when a lookup comes back *empty* — here no lookup was attempted at
+all, so no disclosure fired and the letter of rule 10 was technically
+satisfied while the explanation was, in effect, silently sourced from the
+model's own training knowledge with the same confident tone a grounded
+answer would carry).
+
+Likely contributing cause: rule 8 ("open the session yourself... don't
+wait for the learner to start") gave no instruction to ground before that
+opening question, leaving "open immediately" and "ground first" in
+apparent tension; the model picked speed.
+
+**Decision:** strengthened rule 5 (`conversation/prompt.py`) with an
+explicit clause: grounding the anchor concept applies to the *opening*
+question too, not only to concepts raised later — call
+`search_notes`/`get_note` on the session's own anchor concept before
+asking anything, even the first question. Rule 8 now cross-references
+rule 5 directly ("Ground the anchor concept per rule 5 first; do this
+before your greeting, not after") instead of staying silent on the
+ordering.
+
+**Status:** Proposed (2026-08-13) — prompt wording changed, existing
+offline suite still passes (163 tests, wiring-level only, same limitation
+as #25/#26/#40: nothing here exercises real model behavior). Needs a
+fresh `--debug` run on a vault-anchored topic confirming `search_notes`/
+`get_note` for the anchor concept now fires before the opening question is
+sent, the same bar #25's rule 10 was held to before being called Decided
+— tracked in `backlog.md`.
+
+---
+
+## 42. `--debug` renders full tool calls, as one shared module for both loops
+
+**Context:** #41 was found by reading a real `--debug` transcript, and
+nearly wasn't: both loops printed each tool call as a single line
+truncated at 200 chars (`f"\n[tool call] {name}({args}) -> {content[:200]}"`),
+duplicated in `conversation/loop.py` and `realtime/loop.py`. That format
+is adequate for "did a call happen" but not for the questions
+`backlog.md`'s pending-validation list actually asks — *which* concept
+was grounded, *when* relative to the opening question, and whether the
+result came back substantive or empty. A `search_notes` result is
+comfortably past 200 chars, so exactly the part that decides the question
+(the returned note content) is the part that got cut. Counting calls by
+hand across an interleaved transcript to establish ordering was the other
+half of the problem.
+
+**Decision:** a single `learning_os/debug_output.py` with
+`print_tool_call(number, name, arguments, result_json)`, imported by both
+loops. Divider-delimited block per call, sequence number in the header,
+arguments and result both pretty-printed as indented JSON, nothing
+truncated. Placed at the package root rather than inside either loop's
+package: it is shared presentation used by two sibling consumers, and
+`architecture.md`'s "backend owns the logic" split makes tool-call
+rendering a backend concern, not something either transport re-implements
+for itself. The text loop threads an `itertools.count` through
+`ConversationState` so numbering is continuous across a whole session
+rather than restarting each turn; the voice loop keeps a local counter
+since its session is one long-lived coroutine.
+
+Debug-only presentation, so this deliberately gets no test of its own —
+the offline suite asserts on behavior, and asserting on print formatting
+would just pin the string.
+
+**Status:** Decided (2026-08-13) — 163 tests pass. Not a
+live-model-behavior claim; it is the instrument the remaining
+live-behavior claims (#41 especially) get checked with.

@@ -45,15 +45,20 @@ source data exists) — and, as of Milestone 11, is exposed as such over
 MCP too (a stub call surfaces a real MCP error, not a faked success).
 Carried-forward known gaps, not bugs: voice sessions still can't persist
 mistakes (`save_mistake` doesn't reliably fire over the Realtime API —
-`decisions.md` #22); `_infer_domain` doesn't detect a specific language
-from a vault-triggered session, so new language mistakes caught in normal
-conversation won't auto-join the language-import bucket (`decisions.md`
-#23); cross-domain interleaving isn't implemented in the session planner;
-`MistakeEntry.corrected` never flips to `True`; registering the server
-with Claude Desktop/Code itself is left for the user to try whenever
-convenient (config snippet below), not blocking since the protocol layer
-is already validated for real. See `decisions.md` #9–24 for the choices
-made so far.
+`decisions.md` #22); cross-domain interleaving isn't implemented in the
+session planner; `MistakeEntry.corrected` never flips to `True`;
+registering the server with Claude Desktop/Code itself is left for the
+user to try whenever convenient (config snippet below), not blocking
+since the protocol layer is already validated for real. (The
+`_infer_domain` gap previously noted here — a vault-triggered session not
+detecting a specific language, so new mistakes wouldn't auto-join the
+language-import bucket — was fixed 2026-08-12, `decisions.md` #31.) See
+`decisions.md` #9–31 for the choices made so far, plus #32–42 from the
+2026-08-13 session (BM25 search, spaced repetition, vault centrality,
+pedagogy rule refinements including #41's anchor-concept grounding fix,
+and #42's full-detail `--debug` tool-call rendering, which is how #41 was
+found — see `backlog.md` for what's still pending real-session
+validation).
 
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in

@@ -54,11 +54,15 @@ about to explain three paragraphs of background, ask a question instead.
 5. Ground the session in real content, not general knowledge — using the \
 right source for the domain. For vault-anchored domains, use search_notes, \
 get_note, and related_notes to pull real note content and terminology \
-before quizzing on a concept. This applies to any concept you're about to \
-quiz on, not only the ones on today's list — if the learner steers into a \
-related idea mid-conversation that wasn't planned for, ground that the \
-same way before testing recall on it; being unplanned doesn't make it \
-exempt. For language-domain sessions, rule 9's tools \
+before quizzing on a concept. This includes the session's own anchor \
+concept (the first entry in today's concept list) and your very first \
+question — ground it before you ask anything, not just before later ones; \
+rule 8's instruction to open promptly is about not waiting on the learner, \
+it is not permission to open ungrounded. This applies to any concept \
+you're about to quiz on, not only the ones on today's list — if the \
+learner steers into a related idea mid-conversation that wasn't planned \
+for, ground that the same way before testing recall on it; being \
+unplanned doesn't make it exempt. For language-domain sessions, rule 9's tools \
 are the grounding source instead: a concept like "Vocabulary Precision & \
 False Friends — In progress (...)" is a real curriculum/mistake-tracking \
 label from Language-Lab, not a vault note title — don't call get_note or \
@@ -79,7 +83,8 @@ re-check it rather than ending on it unresolved.
 domain to check whether a past session already flagged a gap worth \
 re-testing today.
 8. Open the session yourself with a brief, natural greeting and your first \
-question — don't wait for the learner to start.
+question — don't wait for the learner to start. Ground the anchor concept \
+per rule 5 first; do this before your greeting, not after.
 9. If today's topic is language practice (English, German, Japanese, or \
 Turkish), you may call get_language_profile and get_curriculum with that \
 language's name to check tracked practice history and curriculum status \

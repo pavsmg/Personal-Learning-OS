@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 
 from learning_os.config import get_settings
 from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
+from learning_os.debug_output import print_tool_call
 from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
 from learning_os.realtime.session_log import SessionLog
 from learning_os.realtime.tools import to_realtime_tools
@@ -65,6 +66,7 @@ async def run_voice_session(topic: str | None = None, debug: bool = False) -> No
         await speaker.start()
         response_in_progress = False
         assistant_transcript: list[str] = []
+        call_number = 0
 
         async def stream_microphone() -> None:
             async with Microphone() as mic:
@@ -101,7 +103,8 @@ async def run_voice_session(topic: str | None = None, debug: bool = False) -> No
                     arguments = json.loads(event.arguments)
                     output = await handle_tool_call(event.name, arguments)
                     if debug:
-                        print(f"\n[tool call] {event.name}({arguments}) -> {output[:200]}")
+                        call_number += 1
+                        print_tool_call(call_number, event.name, arguments, output)
                     log.write(f"TOOL CALL: {event.name}({arguments}) -> {output}")
                     await connection.conversation.item.create(
                         item={"type": "function_call_output", "call_id": event.call_id, "output": output}

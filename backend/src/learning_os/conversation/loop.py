@@ -1,8 +1,10 @@
 import argparse
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, field
+from itertools import count
+from typing import Any, Callable, Iterator
 
 from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
+from learning_os.debug_output import print_tool_call
 from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
@@ -34,12 +36,17 @@ class ConversationState:
     session_id: str
     messages: list[dict[str, Any]]
     debug: bool = False
+    call_counter: Iterator[int] = field(default_factory=lambda: count(1))
 
 
 def _get_assistant_reply(
-    messages: list[dict[str, Any]], chat_fn: ChatFn = chat_completion, debug: bool = False
+    messages: list[dict[str, Any]],
+    chat_fn: ChatFn = chat_completion,
+    debug: bool = False,
+    call_counter: Iterator[int] | None = None,
 ) -> str:
     tools = to_openai_tools(TUTORING_TOOLS)
+    counter = call_counter if call_counter is not None else count(1)
     while True:
         reply = chat_fn(messages, tools)
         if not reply.tool_calls:
@@ -67,7 +74,7 @@ def _get_assistant_reply(
             except Exception as exc:  # noqa: BLE001 — feed the error back to the model, don't crash the loop
                 content = to_json({"error": str(exc)})
             if debug:
-                print(f"\n[tool call] {call.name}({call.arguments}) -> {content[:200]}")
+                print_tool_call(next(counter), call.name, call.arguments, content)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
 
@@ -76,22 +83,24 @@ def start_session(
 ) -> tuple[ConversationState, str]:
     plan = create_session(topic)
     messages = [{"role": "system", "content": build_system_prompt(plan)}]
-    opening = _get_assistant_reply(messages, chat_fn, debug=debug)
+    call_counter = count(1)
+    opening = _get_assistant_reply(messages, chat_fn, debug=debug, call_counter=call_counter)
     record_turn(plan.session_id, "assistant", opening)
-    return ConversationState(session_id=plan.session_id, messages=messages, debug=debug), opening
+    state = ConversationState(session_id=plan.session_id, messages=messages, debug=debug, call_counter=call_counter)
+    return state, opening
 
 
 def send_message(state: ConversationState, user_text: str, chat_fn: ChatFn = chat_completion) -> str:
     state.messages.append({"role": "user", "content": user_text})
     record_turn(state.session_id, "user", user_text)
-    reply = _get_assistant_reply(state.messages, chat_fn, debug=state.debug)
+    reply = _get_assistant_reply(state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter)
     record_turn(state.session_id, "assistant", reply)
     return reply
 
 
 def end_session(state: ConversationState, chat_fn: ChatFn = chat_completion) -> tuple[str, SessionSummary]:
     state.messages.append({"role": "user", "content": END_SESSION_NUDGE})
-    closing = _get_assistant_reply(state.messages, chat_fn, debug=state.debug)
+    closing = _get_assistant_reply(state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter)
     record_turn(state.session_id, "assistant", closing)
     finish_session(state.session_id)
     return closing, summarize_session(state.session_id)
