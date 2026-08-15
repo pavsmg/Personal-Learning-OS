@@ -95,6 +95,15 @@ Discussion-stage, none of these are scoped or decided yet (opened
   6 gives mastery data to inform them for real") — Milestone 6 shipped
   that data; the planner never came back to use it.
 
+- [ ] **Evidence memory (two-sided evidence + Anki-comparable
+  scheduler)** — proposed 2026-08-15, `decisions.md` #44. Record what goes
+  *right*, not only what goes wrong, graded once per session from the
+  transcript; per-concept stability/difficulty on FSRS semantics with
+  fixed constants rather than per-user fitting. Would also close the
+  voice-can't-save-mistakes gap (#22) as a side effect. Staged behind
+  #43's fix, real session volume, and a `pedagogy.md` section — the
+  binding constraint is data, not algorithm.
+
 ## Improvement ideas — retrieval / knowledge graph
 
 - [x] ~~Weighted graph centrality core primitive~~ — done, `decisions.md`

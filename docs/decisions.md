@@ -1789,3 +1789,140 @@ mistake, understanding spanning 0.02–0.85 — enough to sanity-check a
 mapping against (`Gradient descent` at 0.03 must come out foundational),
 nowhere near enough to fit a threshold to, the same position
 `OVERDUE_TIE_BUCKET_SIZE` was in.
+
+---
+
+## 44. Evidence memory: two-sided evidence, and an honest comparison against Anki
+
+**Context:** Stated goal (2026-08-15): emulate Anki's spaced repetition as
+closely as is sensible, and beat it where this system structurally can.
+This entry exists because the immediate question — should untracked
+concepts default to 0 instead of 1.0 (#43) — turns out to be unanswerable
+inside the current model, and the reason why is the design question worth
+settling.
+
+Today the store is one-sided: `save_mistake` writes a row when something
+goes wrong, nothing is written when something goes right, and
+`MistakeEntry.corrected` never flips to `True`. Understanding is
+`1.0 - average(confidence of recorded mistakes)`, and the interval is that
+number mapped linearly onto 1–14 days (#32).
+
+With one-sided evidence, **no default for "never tested" is honest**:
+
+- `1.0` (today) makes an untested concept look perfectly mastered — it is
+  the empty-sum identity of a failure metric, not a claim, but every
+  consumer has to remember to check `mistake_count` to know that.
+- `0.0` inverts the absurdity instead of fixing it: a concept you failed
+  once scores `1 - 0.4 = 0.6`, so "never seen" would rank *below*
+  "demonstrably failed", and — since successes are never recorded — it
+  could never rise. A concept you know well but never got wrong would sit
+  at 0 permanently.
+
+One scalar is carrying two independent facts: how much evidence exists,
+and what that evidence says. That is the actual defect.
+
+**What Anki actually does** (stated so the comparison is real):
+its current default scheduler, FSRS, models memory as difficulty,
+stability, and retrievability, and schedules a card for the moment
+predicted recall decays to a target retention (0.9 by default), with
+parameters optimized from the user's own review log. SM-2, its
+predecessor and still the legacy option, multiplies a card's interval by
+a per-card ease factor and collapses it on a lapse. Both take a
+**self-reported** grade (Again/Hard/Good/Easy) on an atomic item, and both
+depend on that grade arriving on every single review. Exact FSRS
+parameter/version details should be re-checked against Anki's own docs
+before any implementation — the design below deliberately doesn't depend
+on them.
+
+**Where this system differs structurally** — the part that decides whether
+copying Anki is even the right target:
+
+- *Advantage — observation quality.* Anki's grade is self-reported after
+  the answer is revealed, which is exactly the condition under which
+  hindsight bias inflates self-assessment. Here the grade comes from an
+  explanation the learner produced *before* seeing any answer (rules 1, 2,
+  11). That is a better observation, not just a different one.
+- *Advantage — what an item can test.* A card tests recall of one fixed
+  face. A conversation can test explanation in the learner's own words and
+  transfer to a novel scenario (rule 11), which is the thing `pedagogy.md`
+  says separates real understanding from recited fluency.
+- *Advantage — typed misconceptions.* `MistakeEntry` records category and
+  explanation, so a failure says *how* it failed. Anki knows only that a
+  card lapsed. Re-quizzing can target the specific error rather than
+  repeating the same prompt.
+- *Advantage — no authoring cost.* The vault is the deck; BM25 search and
+  `related_notes` build items, so nothing has to be hand-written into
+  cards first.
+- *Decisive disadvantage — throughput.* Twenty minutes of Anki yields on
+  the order of 100–200 graded observations. Twenty minutes of conversation
+  yields roughly five. That is a two-order-of-magnitude gap in the input
+  any scheduling algorithm eats, and it is why this design must not copy
+  FSRS's fitted-parameter approach: fitting needs something like 10^3
+  observations, and this system will have 10^1 for a long time (today: 10
+  tracked pairs, 8 of them a single mistake).
+- *Disadvantage — capture reliability.* Anki cannot miss a review. Here
+  capture depends on the model calling a tool mid-conversation, which
+  rule 3 already fights for and which does not work at all in voice (#22).
+
+**Proposed decision** (design only — no code, see Status):
+
+1. **A two-sided `evidence` table**, not a rewrite of `mistakes`:
+   `(domain, concept, timestamp, outcome, quality, source, session_id)`.
+   Existing mistake rows stay exactly where they are and are read as
+   negative evidence, so #10's git-exported audit trail stays intact and
+   nothing already recorded is destructively migrated.
+2. **Capture at end of session, in one judged pass — not per turn.**
+   Asking the model to call a `save_success` tool on every correct answer
+   doubles the burden rule 3 already struggles to enforce. Instead,
+   `finish_session` grades each planned concept once from the transcript:
+   `not_reached / incorrect / partial / correct / correct_with_application`
+   (the last being rule 11's transfer question actually cleared). This
+   follows the career module's precedent (#19): use an LLM where the task
+   is genuinely semantic, unlike `summarize_session`'s deliberate
+   substring naivety.
+   **Side effect worth naming: this would also fix #22.** Voice sessions
+   can't call `save_mistake` reliably, but their transcripts are already
+   logged — a transcript-graded pass captures voice evidence without
+   depending on in-conversation tool calls at all. The documented voice
+   limitation stops being structural.
+3. **Anki-shaped per-concept state with fixed, documented constants**:
+   stability (in days) and difficulty, updated multiplicatively per
+   observation — success extends stability, failure cuts it — scheduled on
+   FSRS's *semantics* (review when predicted recall reaches a target
+   retention) but never with per-user parameter fitting, per the
+   throughput argument above.
+4. **`_overdue_ratio` keeps its exact shape** (elapsed ÷ interval, >1 means
+   overdue). This replaces *how the interval is computed*, not the
+   scheduling interface, so `recommend_review_scored`, `recommend_domain`
+   (#33), the importance tiebreak (#39) and the session planner keep
+   working untouched.
+5. **"No evidence" stays representable as absence**, never as 0 or 1 —
+   #43's small fix becomes standing policy: the scalar reports what
+   evidence says, and absence of evidence is reported as absence.
+6. **`corrected` finally gets meaning**: a later `correct` observation
+   marks that concept's earlier mistakes corrected, closing a
+   carried-forward known gap.
+
+**What this explicitly does not claim.** Not that it beats Anki on
+retention. `pedagogy.md`'s honest position stands: this system's case is
+lower-friction habit formation and coverage of open-ended material, not
+proven retention per unit time. Better-quality observations that are 100×
+sparser are not automatically a better scheduler, and for atomic factual
+recall (vocabulary, formulas, dates) Anki should be expected to stay
+ahead. The defensible split is: Anki for atomic facts, this system for
+explanation and transfer. Every signal here remains scoped to conceptual
+understanding, not competence (`pedagogy.md`, "Realistic goals").
+
+**Status:** Proposed (2026-08-15) — design only, nothing built, no code
+written. Deliberately staged behind three prerequisites: (a) #43's
+"no evidence" fix, which is small and independent; (b) enough real
+sessions for a two-sided store to have anything to hold — the binding
+constraint is data volume, not algorithm quality, and building a
+sophisticated scheduler over 10 observations optimizes the wrong end;
+(c) a new `pedagogy.md` section covering this Anki comparison, since
+CLAUDE.md gates any new learning mechanism on that doc rather than on
+the mechanism sounding reasonable. Open question not resolved here: what
+to do with concepts that get discussed but never actually quizzed — they
+generate no observation of either sign, and treating discussion as
+evidence would reintroduce exactly the fluency-as-understanding error
+`pedagogy.md` warns about.
