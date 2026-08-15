@@ -60,6 +60,28 @@ and #42's full-detail `--debug` tool-call rendering, which is how #41 was
 found — see `backlog.md` for what's still pending real-session
 validation).
 
+**2026-08-15 session — #43–46.** #45 (built): `estimate_mastery` returns
+`null` for a concept with no recorded history instead of the old `1.0`
+default, which read as "fully understood" to any caller that didn't also
+check `mistake_count`. #46 (built): #10's backups and git-tracked JSON
+export finally exist — `learning-os-backup`, plus an automatic refresh on
+every write. #43 and #44 are **proposed, not built**: #43 scopes
+difficulty/duration from real evidence (and found that neither field has
+any reader today), #44 proposes the larger shift to a two-sided evidence
+store with an honest Anki comparison, staged behind real session volume.
+
+**Gaps found in the 2026-08-15 audit, none of them built yet**, roughly by
+severity: sessions live only in an in-memory dict, so turns and summaries
+vanish when the process exits — and the text loop, unlike voice, keeps no
+transcript on disk at all, which #44's end-of-session grading would need;
+the Language-Lab importer dedupes by concept, so it imports each pattern
+once and never picks up later status/`seen_count` changes; `severity` is
+written on every row and read by no calculation; `confidence` drives the
+entire understanding metric while being defined nowhere the model can see
+it (#45 documents both); `get_learning_statistics` is still a
+`NotImplementedError` stub; the FastAPI app exposes only `/` and
+`/health`, so none of the 18 tools are reachable over HTTP.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
