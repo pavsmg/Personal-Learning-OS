@@ -118,3 +118,9 @@ def build_system_prompt(plan: SessionPlan) -> str:
         objective=plan.objective,
         concepts=", ".join(plan.concepts),
     )
+
+
+# Lives here, not in either loop: both text and voice end a session by
+# handing the model this same line, and a wrap-up turn that differs by
+# modality would make them two different tutors (decisions.md #48).
+END_SESSION_NUDGE = "[The learner wants to end the session now.]"

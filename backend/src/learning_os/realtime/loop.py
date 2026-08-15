@@ -1,17 +1,18 @@
 import argparse
 import asyncio
 import json
+import sys
 from functools import lru_cache
 from typing import Any
 
 from openai import AsyncOpenAI
 
 from learning_os.config import get_settings
-from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
+from learning_os.conversation.prompt import END_SESSION_NUDGE, TUTORING_TOOLS, build_system_prompt
 from learning_os.debug_output import print_tool_call
 from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
-from learning_os.session_log import SessionLog
 from learning_os.realtime.tools import to_realtime_tools
+from learning_os.session_log import SessionLog
 from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionPlan
@@ -29,6 +30,28 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> str:
         return to_json(serialize_for_json(result))
     except Exception as exc:  # noqa: BLE001 — feed the error back to the model, don't crash the loop
         return to_json({"error": str(exc)})
+
+
+async def open_session(connection: Any) -> None:
+    """Rule 8 has the tutor open the session itself. The text loop does that
+    by asking for the first reply outright; over the Realtime API nothing is
+    spoken until a response is created, so without this the model sits
+    waiting for the learner — the exact opposite of the rule, and not a
+    disobedient model but an unreachable instruction (decisions.md #48)."""
+    await connection.response.create()
+
+
+async def request_closing(connection: Any) -> None:
+    """The same wrap-up turn the text loop gets from END_SESSION_NUDGE: a
+    spoken recap of what was covered, before the session is summarized."""
+    await connection.conversation.item.create(
+        item={
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": END_SESSION_NUDGE}],
+        }
+    )
+    await connection.response.create()
 
 
 def _session_config(plan: SessionPlan) -> dict[str, Any]:
@@ -74,7 +97,22 @@ async def run_voice_session(topic: str | None = None, debug: bool = False) -> No
                     await connection.input_audio_buffer.append(audio=chunk)
 
         mic_task = asyncio.create_task(stream_microphone())
-        print("Ready — start talking any time, even while it's speaking. Press Ctrl+C to stop.\n")
+        closing_requested = False
+
+        async def wait_for_end_request() -> None:
+            """Ending with Enter rather than Ctrl+C is what makes a closing
+            turn possible at all: an interrupt tears the task down mid-await,
+            leaving no way to send the nudge and play the answer back. Ctrl+C
+            still works as a hard abort, just without the wrap-up."""
+            nonlocal closing_requested
+            await asyncio.to_thread(sys.stdin.readline)
+            closing_requested = True
+            print("\n[wrapping up...]")
+            await request_closing(connection)
+
+        end_task = asyncio.create_task(wait_for_end_request()) if sys.stdin.isatty() else None
+        print("Ready — start talking any time, even while it's speaking. Press Enter to finish.\n")
+        await open_session(connection)
 
         try:
             async for event in connection:
@@ -118,12 +156,18 @@ async def run_voice_session(topic: str | None = None, debug: bool = False) -> No
                         record_turn(plan.session_id, "assistant", full_text)
                         assistant_transcript.clear()
                     print()
+                    if closing_requested:
+                        # The wrap-up has finished playing; anything further
+                        # would be talking past the end of the session.
+                        break
                 elif event.type == "error":
                     print("API error:", event.error)
                     log.write(f"ERROR: {event.error}")
         finally:
             mic_task.cancel()
-            await asyncio.gather(mic_task, return_exceptions=True)
+            if end_task is not None:
+                end_task.cancel()
+            await asyncio.gather(mic_task, *(t for t in [end_task] if t is not None), return_exceptions=True)
             await speaker.stop()
             await unload_module(module_id)
             finish_session(plan.session_id)

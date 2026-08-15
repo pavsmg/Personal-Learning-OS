@@ -62,6 +62,14 @@ rule:
   `summarize_skills_for_cv()` for real and confirm the more foundational
   one is emphasized/leads, not just listed in the same order as always.
 
+- **Voice open/close parity** — `decisions.md` #48. Voice now opens the
+  session itself (`response.create` after `session.update`) and gets a
+  spoken wrap-up when you press Enter. Offline tests cover the protocol
+  messages; live behaviour is unconfirmed. Check: start `learning-os-voice`
+  and say nothing — the tutor should greet and ask its first question
+  unprompted; then press Enter and confirm a spoken recap arrives before
+  the summary line.
+
 ## Improvement ideas — session planner
 
 Discussion-stage, none of these are scoped or decided yet (opened

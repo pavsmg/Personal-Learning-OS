@@ -2119,3 +2119,65 @@ themselves, so all three orderings satisfy the rule — worth noting that
 the behaviour is stable in *what* it does (anchor grounded before the
 opening question, every time) while varying in how much else it grounds
 and in what order.
+
+---
+
+## 48. Closing the two behavioural gaps between voice and text sessions
+
+**Context:** Asked what other asymmetries exist between the two session
+modes, after #47 removed the transcript one. Comparing the loops event by
+event turned up two that change what the tutor actually does, not just
+what gets recorded:
+
+1. **Voice never opened the session.** `connection.response.create()`
+   appeared exactly once in the voice loop — after a tool call. Nothing
+   followed `session.update()`, and over the Realtime API nothing is
+   spoken until a response is created, so the model sat waiting for the
+   learner to talk first. Rule 8 ("Open the session yourself with a brief,
+   natural greeting and your first question — don't wait for the learner
+   to start") was therefore unreachable in voice: not a model that
+   disobeys, an instruction with no path to being followed. #41's addition
+   to rule 8 — ground the anchor concept *before* the greeting — was
+   likewise dead text in voice, since there was no greeting.
+2. **Voice had no closing turn.** The text loop hands the model
+   `END_SESSION_NUDGE` and gets a spoken wrap-up before summarizing. The
+   voice loop's `finally` went straight to `finish_session` /
+   `summarize_session`, so ending with Ctrl+C produced only the mechanical
+   substring-matching summary, never a recap.
+
+**Decision:** `open_session()` and `request_closing()` in
+`realtime/loop.py`, called after `session.update()` and on request
+respectively, giving voice the same open-and-close shape as text.
+`END_SESSION_NUDGE` moves out of `conversation/loop.py` into the shared
+`conversation/prompt.py` and both loops import it from there — a wrap-up
+that differed by modality would make these two different tutors, which is
+the opposite of what a shared system prompt is for.
+
+**Ending a voice session is now Enter, not Ctrl+C.** This is a
+consequence, not a preference: an interrupt tears the task down mid-await,
+which leaves no way to send the nudge and play the answer back. A stdin
+watcher task (only when stdin is a TTY) sets a flag, sends the nudge, and
+the event loop breaks after that response finishes playing. Ctrl+C still
+works as a hard abort, now explicitly the path that skips the wrap-up.
+
+**Status:** Decided (2026-08-15) — 178 tests pass, 3 new against a fake
+connection that records what goes over the protocol: an opening
+`response.create` is sent, the closing sends the nudge item *then* asks
+for the response, and both loops end sessions with the same nudge object.
+The audio and event plumbing around them stays untested as before, since
+it needs real devices.
+
+**Not verified live — needs a real voice session with a microphone**,
+which is a different bar from the offline tests and the reason this isn't
+being called confirmed: that the tutor now greets and asks its first
+question unprompted, and that pressing Enter produces a spoken wrap-up
+before the summary. Added to `backlog.md`.
+
+**Asymmetries deliberately left in place**, since they are inherent rather
+than accidental: voice runs `gpt-realtime-mini` against text's
+`gpt-5.4-mini`, so rule-following validated in text does not transfer;
+voice still can't reliably persist mistakes (#22, and #44's
+transcript-graded approach is the proposed fix); the voice loop handles
+API `error` events while the text loop has no equivalent and would raise;
+and the text loop's tool-call loop has no iteration cap, which the voice
+loop's event structure makes impossible.

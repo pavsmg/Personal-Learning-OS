@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from itertools import count
 from typing import Any, Callable, Iterator
 
-from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
+from learning_os.conversation.prompt import END_SESSION_NUDGE, TUTORING_TOOLS, build_system_prompt
 from learning_os.debug_output import print_tool_call
 from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.serialization import serialize_for_json, to_json
@@ -12,7 +12,6 @@ from learning_os.sessions import create_session, finish_session, record_turn, su
 from learning_os.sessions.models import SessionSummary
 from learning_os.tools_interface import TOOLS, call_tool
 
-END_SESSION_NUDGE = "[The learner wants to end the session now.]"
 QUIT_COMMANDS = {"quit", "exit", "done"}
 
 ChatFn = Callable[[list[dict[str, Any]], list[dict[str, Any]]], LLMReply]
