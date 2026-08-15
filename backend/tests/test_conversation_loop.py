@@ -119,3 +119,60 @@ def test_end_session_sends_nudge_then_finishes_and_summarizes(tmp_path, monkeypa
     assert summary.session_id == state.session_id
     last_call_messages = chat.calls[-1]
     assert last_call_messages[-1] == {"role": "user", "content": END_SESSION_NUDGE}
+
+
+def test_text_session_writes_a_transcript_with_tool_calls(tmp_path, monkeypatch):
+    """Parity with the voice loop: a text session has to leave the same kind
+    of readable record, or decisions.md #44's end-of-session grading has
+    nothing to read for half the sessions."""
+    from learning_os import session_log as session_log_module
+
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setattr(session_log_module, "LOG_DIR", tmp_path / "logs")
+    chat = ScriptedChat(
+        [
+            LLMReply(
+                content=None,
+                tool_calls=[ToolCallRequest(id="c1", name="search_notes", arguments={"query": "gradient descent"})],
+            ),
+            LLMReply(content="How would you explain gradient descent?", tool_calls=[]),
+            LLMReply(content="Close, but not quite.", tool_calls=[]),
+            LLMReply(content="Good work today.", tool_calls=[]),
+        ]
+    )
+
+    state, _ = start_session("gradient descent", chat_fn=chat)
+    send_message(state, "It goes downhill.", chat_fn=chat)
+    end_session(state, chat_fn=chat)
+
+    transcript = (tmp_path / "logs" / f"{state.session_id}.log").read_text(encoding="utf-8")
+    assert "SESSION START" in transcript
+    assert "TOOL CALL: search_notes" in transcript
+    assert "USER: It goes downhill." in transcript
+    assert "ASSISTANT: How would you explain gradient descent?" in transcript
+    assert "SUMMARY:" in transcript
+    assert transcript.strip().endswith("SESSION END")
+
+
+def test_tool_calls_are_logged_even_without_debug(tmp_path, monkeypatch):
+    """--debug controls the terminal, not the record."""
+    from learning_os import session_log as session_log_module
+
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setattr(session_log_module, "LOG_DIR", tmp_path / "logs")
+    chat = ScriptedChat(
+        [
+            LLMReply(
+                content=None,
+                tool_calls=[ToolCallRequest(id="c1", name="search_notes", arguments={"query": "gradient descent"})],
+            ),
+            LLMReply(content="Opening.", tool_calls=[]),
+        ]
+    )
+
+    state, _ = start_session("gradient descent", chat_fn=chat, debug=False)
+
+    transcript = (tmp_path / "logs" / f"{state.session_id}.log").read_text(encoding="utf-8")
+    assert "TOOL CALL: search_notes" in transcript

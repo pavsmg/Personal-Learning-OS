@@ -72,9 +72,9 @@ store with an honest Anki comparison, staged behind real session volume.
 
 **Gaps found in the 2026-08-15 audit, none of them built yet**, roughly by
 severity: sessions live only in an in-memory dict, so turns and summaries
-vanish when the process exits — and the text loop, unlike voice, keeps no
-transcript on disk at all, which #44's end-of-session grading would need;
-the Language-Lab importer dedupes by concept, so it imports each pattern
+vanish when the process exits (the text loop's missing transcript, the
+other half of this gap, was fixed 2026-08-15 by #47 — both loops now write
+`logs/<session_id>.log`); the Language-Lab importer dedupes by concept, so it imports each pattern
 once and never picks up later status/`seen_count` changes; `severity` is
 written on every row and read by no calculation; `confidence` drives the
 entire understanding metric while being defined nowhere the model can see

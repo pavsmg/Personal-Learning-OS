@@ -31,7 +31,10 @@ uv run learning-os-chat --debug gradient descent # explicit topic, show tool cal
 uv run learning-os-voice --debug                 # same, for a voice session
 ```
 
-Omit `--debug` for a clean session with no tool-call output.
+Omit `--debug` for a clean session with no tool-call output. Either way, every
+session — text or voice — writes a full transcript with its tool calls to
+`backend/logs/<session_id>.log` (gitignored). `--debug` only controls what the
+terminal shows as it happens; the log is written regardless.
 
 `mistakes.db` is the only data in this project that git can't recover, so it
 gets a rotating binary backup plus a git-tracked JSON export

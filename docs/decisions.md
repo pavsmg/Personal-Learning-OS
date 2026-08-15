@@ -2068,3 +2068,54 @@ binaries aren't, which is exactly #10's intended split.
 (concepts, explanations, timestamps) in a personal repo. That is what #10
 asked for — a human-readable history — but it is worth being aware of
 before this repo is ever shared or made public.
+
+---
+
+## 47. Text sessions write transcripts too, through the same log as voice
+
+**Context:** Voice sessions have written `logs/<session_id>.log` since
+Milestone 9 — transcript plus every tool call. Text sessions wrote
+nothing: `--debug` printed to the terminal and the turns lived in the
+in-memory `_SESSIONS` dict until the process exited. Reviewing a text
+session therefore meant copying scrollback by hand before closing the
+window, which is how #41's original evidence had to be gathered.
+
+The asymmetry also blocks #44 directly: its end-of-session grading reads
+the transcript, and half the sessions had no transcript to read.
+
+**Decision:** `SessionLog` moves from `realtime/` to top-level
+`learning_os/session_log.py` — two loops use it now, the same reasoning
+that moved `llm_client` (#19) and placed `debug_output` (#42) at the root
+— and `conversation/loop.py` writes through it at every point the voice
+loop does: `SESSION START`, `USER:`, `ASSISTANT:`, `TOOL CALL:`,
+`SUMMARY:`, `SESSION END`. The line format is deliberately identical, so
+#44's grading can read both kinds of session with one parser rather than
+two.
+
+Tool calls are logged **regardless of `--debug`**: the flag is about what
+the terminal shows while you sit there, not about whether the session
+leaves a record. `ConversationState` carries the log as `SessionLog |
+None`, so tests and library callers can drive the loop without opening
+files.
+
+**Test isolation, added with it:** an autouse `conftest.py` fixture points
+`LOG_DIR` at a per-test `tmp_path`. Without it every test that starts a
+conversation would write into the repo's real `logs/` — the same class of
+problem #46 avoided by deriving its paths from `db_path`, fixed the same
+way rather than left to discipline.
+
+**Status:** Decided (2026-08-15) — 175 tests pass, 2 new (a full
+start/send/end cycle produces a transcript containing the tool call, the
+user turn, the summary and a terminating `SESSION END`; tool calls are
+logged with `debug=False`). Verified for real: a live `TCP` session wrote
+`logs/1aa66e04-….log` with all five planned concepts grounded via
+`search_notes` before the opening question.
+
+**Incidental third confirmation of #41, with useful variance:** in that
+run the model called `get_recent_mistakes` *first* and then grounded all
+five concepts, where the two runs recorded under #41 grounded the anchor
+first and only the anchor. Rules 5 and 7 impose no order between
+themselves, so all three orderings satisfy the rule — worth noting that
+the behaviour is stable in *what* it does (anchor grounded before the
+opening question, every time) while varying in how much else it grounds
+and in what order.

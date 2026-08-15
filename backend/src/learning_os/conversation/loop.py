@@ -7,6 +7,7 @@ from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
 from learning_os.debug_output import print_tool_call
 from learning_os.llm_client import LLMReply, chat_completion
 from learning_os.serialization import serialize_for_json, to_json
+from learning_os.session_log import SessionLog
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session
 from learning_os.sessions.models import SessionSummary
 from learning_os.tools_interface import TOOLS, call_tool
@@ -37,6 +38,7 @@ class ConversationState:
     messages: list[dict[str, Any]]
     debug: bool = False
     call_counter: Iterator[int] = field(default_factory=lambda: count(1))
+    log: SessionLog | None = None
 
 
 def _get_assistant_reply(
@@ -44,6 +46,7 @@ def _get_assistant_reply(
     chat_fn: ChatFn = chat_completion,
     debug: bool = False,
     call_counter: Iterator[int] | None = None,
+    log: SessionLog | None = None,
 ) -> str:
     tools = to_openai_tools(TUTORING_TOOLS)
     counter = call_counter if call_counter is not None else count(1)
@@ -75,6 +78,10 @@ def _get_assistant_reply(
                 content = to_json({"error": str(exc)})
             if debug:
                 print_tool_call(next(counter), call.name, call.arguments, content)
+            if log is not None:
+                # Logged regardless of --debug: the transcript is the record,
+                # --debug is only about what the terminal shows right now.
+                log.write(f"TOOL CALL: {call.name}({call.arguments}) -> {content}")
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
 
@@ -84,26 +91,49 @@ def start_session(
     plan = create_session(topic)
     messages = [{"role": "system", "content": build_system_prompt(plan)}]
     call_counter = count(1)
-    opening = _get_assistant_reply(messages, chat_fn, debug=debug, call_counter=call_counter)
+    log = SessionLog(plan.session_id)
+    log.write(f"SESSION START domain={plan.domain!r} objective={plan.objective!r} concepts={plan.concepts}")
+
+    opening = _get_assistant_reply(messages, chat_fn, debug=debug, call_counter=call_counter, log=log)
     record_turn(plan.session_id, "assistant", opening)
-    state = ConversationState(session_id=plan.session_id, messages=messages, debug=debug, call_counter=call_counter)
+    log.write(f"ASSISTANT: {opening}")
+
+    state = ConversationState(
+        session_id=plan.session_id, messages=messages, debug=debug, call_counter=call_counter, log=log
+    )
     return state, opening
 
 
 def send_message(state: ConversationState, user_text: str, chat_fn: ChatFn = chat_completion) -> str:
     state.messages.append({"role": "user", "content": user_text})
     record_turn(state.session_id, "user", user_text)
-    reply = _get_assistant_reply(state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter)
+    if state.log is not None:
+        state.log.write(f"USER: {user_text}")
+
+    reply = _get_assistant_reply(
+        state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter, log=state.log
+    )
     record_turn(state.session_id, "assistant", reply)
+    if state.log is not None:
+        state.log.write(f"ASSISTANT: {reply}")
     return reply
 
 
 def end_session(state: ConversationState, chat_fn: ChatFn = chat_completion) -> tuple[str, SessionSummary]:
     state.messages.append({"role": "user", "content": END_SESSION_NUDGE})
-    closing = _get_assistant_reply(state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter)
+    closing = _get_assistant_reply(
+        state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter, log=state.log
+    )
     record_turn(state.session_id, "assistant", closing)
     finish_session(state.session_id)
-    return closing, summarize_session(state.session_id)
+    summary = summarize_session(state.session_id)
+
+    if state.log is not None:
+        state.log.write(f"ASSISTANT: {closing}")
+        state.log.write(f"SUMMARY: {summary.summary}")
+        state.log.write("SESSION END")
+        state.log.close()
+    return closing, summary
 
 
 def run() -> None:

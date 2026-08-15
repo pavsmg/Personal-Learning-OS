@@ -10,7 +10,7 @@ from learning_os.config import get_settings
 from learning_os.conversation.prompt import TUTORING_TOOLS, build_system_prompt
 from learning_os.debug_output import print_tool_call
 from learning_os.realtime.audio import Microphone, Speaker, SAMPLE_RATE, load_echo_cancel_module, unload_module
-from learning_os.realtime.session_log import SessionLog
+from learning_os.session_log import SessionLog
 from learning_os.realtime.tools import to_realtime_tools
 from learning_os.serialization import serialize_for_json, to_json
 from learning_os.sessions import create_session, finish_session, record_turn, summarize_session

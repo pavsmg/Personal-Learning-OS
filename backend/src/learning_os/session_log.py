@@ -9,8 +9,12 @@ class SessionLog:
     logs/<session_id>.log as the session happens. Not the same thing as
     Milestone 9's session-lifecycle persistence (record_turn/
     summarize_session) — this is just a local, human-readable record for
-    reviewing what happened in a voice session, since nothing else does
-    that yet."""
+    reviewing what happened in a session, since nothing else does that yet.
+
+    Used by both loops, hence top-level rather than under realtime/ (same
+    reasoning as llm_client and debug_output). The line format is shared
+    deliberately: decisions.md #44's end-of-session grading would have to
+    read voice and text transcripts through one parser, not two."""
 
     def __init__(self, session_id: str) -> None:
         LOG_DIR.mkdir(parents=True, exist_ok=True)

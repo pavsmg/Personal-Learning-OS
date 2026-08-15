@@ -1,5 +1,5 @@
-from learning_os.realtime import session_log as session_log_module
-from learning_os.realtime.session_log import SessionLog
+from learning_os import session_log as session_log_module
+from learning_os.session_log import SessionLog
 
 
 def test_session_log_writes_timestamped_lines_to_file(tmp_path, monkeypatch):
