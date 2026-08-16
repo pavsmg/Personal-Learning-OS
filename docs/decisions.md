@@ -2181,3 +2181,303 @@ transcript-graded approach is the proposed fix); the voice loop handles
 API `error` events while the text loop has no equivalent and would raise;
 and the text loop's tool-call loop has no iteration cap, which the voice
 loop's event structure makes impossible.
+
+---
+
+## 49. `_infer_domain` folder fallback — phase 1 of 4, honestly scoped
+
+**Context:** `backlog.md` had an open item: `_infer_domain`
+(`sessions/service.py`) falls through to `DEFAULT_DOMAIN` (`"general"`)
+when a note has neither `domain:` frontmatter nor a tag — found via the
+real `TCP.md` note, which has neither. That `"general"` bucket then
+competes as a real domain inside `recommend_domain()`'s rotation
+(`mistakes/service.py`), which picks whichever domain has gone longest
+without tracked activity.
+
+Discussed with the user a 4-phase plan, in this order: (1) fall back to
+the vault's top-level folder as a domain signal, (2) an embeddings-based
+semantic classifier — each domain already in use (frontmatter/mistakes.db)
+as a class, unclassified notes matched against those classes by
+similarity, with a confidence threshold below which no label is forced
+(same honesty pattern as #45's `estimate_mastery` reporting absence
+instead of a faked score), (3) neighbor-vote inference via
+`related_notes()`, staged *after* (2) rather than before it — checked
+against the real vault first: `TCP.md`'s direct neighbors (`Handshake`,
+`TCP-IP`, `UDP`, `Transport layer`, `OSI model`, `protocols`,
+`network protocols`...) have no domain either, so neighbor-voting today
+would find nothing to inherit; it only becomes useful once (2) has raised
+label density, (4) deprioritizing `"general"` inside `recommend_domain()`
+instead of treating it as a domain like any other.
+
+This entry covers phase 1 only.
+
+**Decision:** `_domain_from_folder(note)` added to `sessions/service.py`,
+plugged into `_infer_domain` as the last step before the `"general"`
+fallback — after frontmatter, language-title match, and tag, so nothing
+that already resolved changes behavior. Takes the note's path relative to
+`get_settings().vault_path`; if the note sits directly at the vault root
+(no subfolder), returns `None` same as before. Otherwise the top-level
+folder name, lowercased with spaces replaced by hyphens (e.g.
+`Signal Processing/` → `signal-processing`), becomes the domain.
+
+**Honest finding, verified against the real vault, not assumed:** this
+phase changes the domain of **zero real notes today**. Every note that
+lives in one of the vault's 6 topic folders (`Chemistry/`, `Physics/`,
+`Signal Processing/`, `Artificial Intelligence/`, `Theory of
+Computation/`, `Maths/` — 193 notes total) already has an inline tag that
+resolves before the folder fallback is ever reached — confirmed by
+loading the real vault and checking, per note, whether frontmatter/tag
+would already have produced a domain before this change (they all do).
+`TCP.md` itself sits at the vault root, not in a folder, so this phase
+does not touch the case that motivated it — `_infer_domain('TCP')` still
+returns `"general"` after this change, unchanged. This is a legitimate
+safety net for notes that get organized into a folder in the future
+without also being tagged, not a fix for the present gap — phases 2/4
+are what actually move the real number.
+
+The real number, measured by loading the actual vault (not a hand-rolled
+shell loop — an earlier estimate given informally in conversation,
+"~94% of root notes untagged," was wrong due to a bash word-splitting bug
+on filenames with spaces; this is the corrected, code-path-verified
+count): of 1560 notes total, 1367 sit at the vault root (no folder
+signal available at all). Of those, 1030 have no `domain:` frontmatter,
+and **790 have neither domain frontmatter nor any tag** — those are the
+notes that fall to `"general"` today, `TCP.md` among them. That 790 is
+the real target for phases 2 and 4, not this one.
+
+**Status:** Decided (2026-08-16) — 181 tests pass (3 new: folder fallback
+resolves a real-shaped untagged note in a single-word folder, a
+multi-word folder name normalizes to kebab-case, and frontmatter still
+wins over folder when both are present). Verified against the real vault
+via the actual loader/`_infer_domain` code path: 193 real notes live in a
+subfolder, 0 of them change domain because of this fix;
+`_infer_domain(get_note('TCP'))` still returns `"general"`, confirming
+both "no regression" and "gap still open." Phases 2–4 are not scoped yet
+— tracked in `backlog.md`, to be designed and logged here individually
+when picked up, not batched into this entry ahead of time.
+
+---
+
+## 50. `recommend_domain` deprioritizes `"general"` — phase 4 of #49's plan
+
+**Context:** #49 named 4 phases for the `_infer_domain`-falls-to-`general`
+gap. Picked up phase 4 next (out of order relative to #49's own listing,
+by explicit user choice) since it's the cheapest of the remaining three
+and the only one with a real effect on today's actual data — phase 2
+(embeddings classifier) and phase 3 (neighbor-vote) both need real label
+density to do anything, which #49 confirmed the vault doesn't have yet
+around the motivating `TCP.md` case.
+
+Before this, `recommend_domain()` (`mistakes/service.py`) picked whichever
+domain had gone longest without tracked activity, treating `"general"`
+exactly like any real domain — so a session that landed in `"general"`
+(e.g. a TCP session, per #49) could make `"general"` win a future
+automatic-mode rotation over a domain the learner actually named.
+
+**Decision:** `recommend_domain()` now excludes `UNTRACKED_DOMAIN`
+(`"general"` — a local constant in `mistakes/service.py`, deliberately not
+imported from `sessions/service.py`'s `DEFAULT_DOMAIN` of the same value,
+since `sessions` already imports from `mistakes` and the reverse import
+would cycle) from the rotation whenever at least one real domain has any
+tracked activity. `"general"` is only returned when it's the *only*
+domain with tracked activity at all — the same "real signal is absent"
+shape `_find_blind_spot_topic` already uses for automatic mode's
+cold-start case, applied one level up (domain selection instead of
+concept selection).
+
+**Status:** Decided (2026-08-16) — 183 tests pass (2 new: a real domain
+wins over a more-stale `"general"` entry; `"general"` is still returned
+when it's the only domain tracked, so automatic mode doesn't regress to
+`None` in that case). Verified against a copy of the real `mistakes.db`,
+not just synthetic fixtures: with the real data (`languages`,
+`classical-ml`, `math-foundations`, no `"general"` entries currently)
+`recommend_domain()` returns `"languages"`; inserting a `"general"`
+mistake backdated 90 days (older than every real domain's last activity,
+enough to have won under the old raw-staleness rule) still leaves
+`"languages"` as the pick — confirming the deprioritization holds against
+real data, not just the synthetic ordering the unit tests construct.
+
+---
+
+## 51. Embeddings-based domain classifier — phase 2 of #49's plan, writing into the vault
+
+**Context:** Picked up phase 2 next, per `backlog.md`. Each domain already
+in real use elsewhere in the vault (via `infer_domain`) as a class;
+unclassified notes matched against those classes by embedding similarity,
+with a confidence threshold below which nothing gets forced — same
+honesty pattern as #45.
+
+**Where results live — the consequential fork, decided explicitly with the
+user against my own recommendation:** I proposed a backend-owned cache
+(new table, vault stays read-only like every other module today) on
+provider-resilience grounds (#2: an embedding engine should be swappable
+without touching durable data). The user chose the other option: write
+`domain:` directly into each classified note's real frontmatter. This is
+the first place this project writes to the vault instead of only reading
+it — a deliberate, explicit choice, not a default. Consequence for #2's
+principle: raw embedding vectors are never persisted anywhere (centroids
+are recomputed from source notes on every run), so a future embedding-
+provider swap only needs a rerun, not a migration — the *domain labels*
+this run produces are durable vault content the same way any frontmatter
+the user writes by hand is, deliberately outside that principle's scope.
+
+**Decision:** New `classification/` module (`models.py`/`service.py`/
+`cli.py`, `uv run learning-os-classify-domains --apply`, dry-run by
+default). `embed_texts` added to `llm_client.py` (new
+`openai_embedding_model` setting, `text-embedding-3-small`) — provider
+specifics stay isolated there, matching every other provider call in this
+project. `infer_domain` promoted from `_infer_domain` (`sessions/
+service.py`, was private) since `classification/service.py` needs the
+same resolution logic both to find which notes already have a real domain
+(the classes) and which fall to `general` (the candidates) — no
+duplicated logic between the two modules.
+
+Classes are built from every note `infer_domain` already resolves to a
+real (non-`general`) domain, one centroid per domain (the average
+embedding of that domain's notes). A candidate note's domain is whichever
+centroid it's most cosine-similar to, if that similarity clears
+`DEFAULT_CONFIDENCE_THRESHOLD` (0.6, unturned like the other magic
+numbers in this codebase) — below it, left unclassified, same as today.
+`apply_classifications` inserts `domain: <label>` via a text-level splice
+at the frontmatter's closing `---`, not a YAML round-trip, so it can't
+reformat/reorder anything the user wrote by hand; skips a note that
+already gained a `domain` key since classification ran, rather than
+clobbering it.
+
+**Real finding, not assumed: the first pass was actually bad, and got
+fixed before touching a single real file.** Running the classifier
+against the real vault with no extra filtering produced 31 "classes" from
+`infer_domain`'s existing tag fallback (`note.tags[0]`) — most were real
+domains (`chemistry`, 56 notes; `physics`, 49; etc.), but several were
+single-note tags (`define`, `ideas`, `statistics`, `philosohy`,
+`hashtag`, `infomatica`, `datastructures`, `maths`, `english`) and one,
+`transconcept` (25 notes: `Object`, `Callback`, `Event`, `Serialization`,
+`Cluster`...), was a real, well-populated *meta*-tag for cross-cutting CS
+concepts, not a subject domain at all. Unfiltered, ~34% (25/74) of the
+dry run's results landed in one of these — `JavaScript` and `WebSocket`
+both got classified as `transconcept`, which is wrong. Caught before any
+write happened, reported to the user with the real numbers, and fixed
+with two new constants: `MIN_CLASS_SIZE = 5` (drops every true one-off
+automatically — a count-based filter needs no per-tag judgment call) and
+`EXCLUDED_CLASS_DOMAINS = {"transconcept"}` (an explicit, user-confirmed
+exclusion for the one case count alone can't catch, since a meta-tag can
+be just as well-populated as a real domain). Re-run after the fix: 19
+clean classes, 49 notes classified, zero landing in a non-domain class —
+manually reviewed the full list, every match is a sensible one
+(`'Finite automata' -> automata`, `'Policy-Based & Actor-Critic Methods'
+-> reinforcement-learning`, etc.).
+
+**`TCP.md` itself, checked directly: still not fixed, honestly, and for a
+different reason than phase 1's.** Its best match against the real
+centroids is `transconcept` at 0.527 — excluded by name, and below
+threshold regardless. No `networking` class exists anywhere in this
+vault's real domain signal (no networking note has ever been tagged or
+frontmattered with a domain), so there is nothing for phase 2 to match it
+against — this isn't a threshold-tuning problem, it's a real absence of
+labeled data in the one area that motivated the whole investigation.
+Fixing that needs either a real networking note getting a real domain
+label some other way (manually, or a future session), or phase 3
+(neighbor-vote) finding a *labeled* neighbor once density is higher
+elsewhere in the graph — neither is true yet for this specific cluster.
+
+**Status:** Decided (2026-08-16) — 192 tests pass (9 new, all against a
+fake embedder injected via `_embed_fn`, no real API calls in the offline
+suite: general-domain exclusion, `MIN_CLASS_SIZE` and
+`EXCLUDED_CLASS_DOMAINS` filtering, above/below-threshold classification,
+the no-labeled-classes short-circuit, and three `apply_classifications`
+cases — no existing frontmatter, existing non-domain frontmatter
+preserved, and skipping a note that already has a domain). Applied for
+real against the real vault, with the user's explicit go-ahead
+immediately before writing: `--apply` wrote `domain:` into 49 real notes,
+confirmed after the fact via `git diff` in the vault repo (currently at
+`~/Documents/Obsidian-Digital-Brain`, git-tracked) — every write is a
+clean 4-line frontmatter insertion with the body otherwise byte-identical,
+including on notes that already had unrelated uncommitted edits pending
+in the same file (`Agent Concepts.md`, `LLM & Generative Models.md`, `AI
+branches.md` — the insertion layers on top of the user's own pending
+edit without touching it). Real API cost: embedding ~1,150 notes
+(centroid sources + candidates) against `text-embedding-3-small`, a
+fraction of a cent. Phase 3 (neighbor-vote) is next per `backlog.md`, and
+now has real data to work with in the domains phase 2 touched, even
+though the TCP cluster specifically still has none.
+
+---
+
+## 52. Discovering new domains by clustering, and seeding `networking` — closing the TCP case for real
+
+**Context:** #51 built a *supervised* classifier: it can only assign a
+note to a domain someone already used somewhere. `TCP.md` stayed
+unclassified because no `networking` domain existed anywhere in the
+vault's real signal — not a threshold problem, an absence-of-labels
+problem, as #51 stated honestly. Asked to actually close that gap: find
+what real topics exist among the 741 still-unlabeled notes, and propose
+new domains grounded in their real content, not guessed.
+
+**Decision:** One-off exploratory clustering pass (not added to the
+permanent codebase — a script, not a new module): embed all 741
+`general`-bucketed notes, then greedily group them by cosine similarity
+against running cluster centroids (threshold 0.64), same math as #51's
+classifier reused for a different purpose (discovery instead of
+matching). Produced 528 clusters from 741 notes (411 singletons — most
+notes genuinely don't share a tight topic with anything else unlabeled),
+11 of them ≥5 members. Reviewed every one manually before proposing
+anything — this did **not** auto-create domains from cluster output.
+
+Two of the 11 clusters were the same real topic split by the greedy,
+order-dependent algorithm (`Ethernet/Link layer/Transport layer/
+Application layer/TCP-IP/OSI model/Packet`, 7 notes, and `Internet/
+internet protocols/ip/Internet layer/network protocols/TCP`, 6 notes) —
+merged by hand into one `networking` domain, 13 seed notes including
+`TCP` itself. One cluster (`Ser un buen hombre/Sustitutos de la
+masculinidad/Societal analysis/Honor/MASCULINITY/Masculinity crisis`, 6
+notes) was clearly non-technical personal/sociology content, not tutoring
+material — flagged to the user explicitly rather than assumed either way;
+excluded by their choice, not mine.
+
+Presented all 9 candidates with their real member lists before writing
+anything. User approved 8 (all but the non-technical one): `networking`
+(13), `linux` (15, merging the `Disks and Filesystems/.../Linux
+Fundamentals` and `Unix-like OS/Minix/GNU-Linux/Linux/GNU` clusters the
+same way), `javascript` (10), `algorithms` (8), `databases` (7),
+`computer-architecture` (6), `data-structures` (6), `bash-scripting` (5).
+70 notes seeded via `apply_classifications` (the same function #51
+built — confidence 1.0, since these are manually curated, not
+threshold-matched). Re-ran `learning-os-classify-domains`: the 8 new
+domains, now real classes with real centroids, matched 32 more real
+notes on their own — `packet switching`, `HTTP`, `Socket`, `TLS`, `FTP`
+→ `networking`; `glibc`, `kernel`, `Boot Process` → `linux`; etc. Applied
+after showing the list and getting explicit confirmation, same as every
+other real write in #51.
+
+**`TCP.md` itself: `domain: networking`, confirmed by reading the file
+directly.** The case that started the whole #49 investigation is closed
+— not by a smarter matching algorithm, but by there finally being a real
+`networking` domain for it to belong to.
+
+**Deferred, not decided: multiple domains per note.** Asked whether
+genuinely cross-cutting notes (e.g. a note relevant to both `networking`
+and `cybersecurity`) should get more than one `domain:`. Recommendation
+given, not yet acted on: scope it narrowly if it happens — `domain:` as a
+vault frontmatter list is a small, additive change (YAML already supports
+it, `_insert_domain_frontmatter` would need a "note already has a domain
+list" case), but `MistakeEntry.domain`, `SessionPlan.domain`, and
+`recommend_domain()`'s rotation are all typed as a single `str` throughout
+the durable data model and the `tools.md` contract — making a session or
+a mistake genuinely multi-domain is a real schema change with its own
+ripple effects (which domain's spaced-repetition clock does a shared
+mistake update? does it count toward both domains' `recommend_domain`
+staleness?), not a small addition alongside this one. Not scoped, no code
+written — a future decision on its own, if it turns out to matter once
+more notes carry multiple genuine domains than today's clustering found
+(none of the 9 candidate clusters actually overlapped with each other in
+this pass).
+
+**Status:** Decided (2026-08-16) — no new automated tests: this session
+produced curated, one-time domain-seeding decisions (which real notes
+belong to `networking`, `linux`, etc.), not new reusable logic —
+`apply_classifications` and the classifier itself were already covered by
+#51's suite (192 tests, still passing, untouched by this entry). Verified
+against the real vault directly: 102 more real notes now carry a real
+`domain:` (70 seeded + 32 classified against the new classes), unlabeled
+count dropped from 741 to 639, and `TCP.md` — read directly, not
+assumed — now says `domain: networking`.

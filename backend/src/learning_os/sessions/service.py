@@ -2,6 +2,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 
+from learning_os.config import get_settings
 from learning_os.language import LANGUAGES, get_curriculum
 from learning_os.mistakes import get_learning_profile, recommend_domain, recommend_review_scored
 from learning_os.retrieval import concept_importance, get_note, most_important_notes, related_notes, search_notes
@@ -33,7 +34,26 @@ class _SessionRecord:
 _SESSIONS: dict[str, _SessionRecord] = {}
 
 
-def _infer_domain(note: Note) -> str:
+def _domain_from_folder(note: Note) -> str | None:
+    """The vault's top-level subfolder a note lives in, e.g. a note under
+    Chemistry/... implies domain "chemistry". None for a note directly at
+    the vault root (no subfolder) -- most of the vault lives there, and a
+    root note gets no folder signal to synthesize a domain from, same as
+    if it had no frontmatter/tags."""
+    try:
+        relative = note.path.relative_to(get_settings().vault_path.resolve())
+    except ValueError:
+        return None
+    if len(relative.parts) < 2:
+        return None
+    return relative.parts[0].strip().lower().replace(" ", "-")
+
+
+def infer_domain(note: Note) -> str:
+    """Public (not `_`-prefixed) since `classification/service.py` (phase 2
+    of decisions.md #49) needs the same resolution logic to find which
+    notes already have a real domain to build classifier classes from, and
+    which fall to DEFAULT_DOMAIN and are candidates to classify."""
     frontmatter_domain = note.frontmatter.get("domain")
     if frontmatter_domain:
         return str(frontmatter_domain)
@@ -42,6 +62,9 @@ def _infer_domain(note: Note) -> str:
             return language
     if note.tags:
         return note.tags[0]
+    folder_domain = _domain_from_folder(note)
+    if folder_domain:
+        return folder_domain
     return DEFAULT_DOMAIN
 
 
@@ -146,7 +169,7 @@ def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPl
 
     anchor_title = matches[0].title
     anchor_note = get_note(anchor_title)
-    domain = _infer_domain(anchor_note) if anchor_note else DEFAULT_DOMAIN
+    domain = infer_domain(anchor_note) if anchor_note else DEFAULT_DOMAIN
 
     concepts = _language_concepts(domain, max_concepts) if domain in LANGUAGES else []
     if concepts:

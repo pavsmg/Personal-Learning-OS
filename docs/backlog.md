@@ -105,13 +105,71 @@ Discussion-stage, none of these are scoped or decided yet (opened
   #43's fix, real session volume, and a `pedagogy.md` section — the
   binding constraint is data, not algorithm.
 
-- [ ] **`_infer_domain` falls through to `general` for untagged notes.**
-  Found while validating #41: the vault's `TCP` note has no frontmatter
-  `domain:` and no tags, so a whole networking session runs as
-  `domain='general'` and any mistake saved in it is filed there. That
-  bucket then competes with real domains in `recommend_domain`'s (#33)
-  rotation. Fixable in the vault (add tags) or in the planner (infer from
-  the note's graph neighbourhood) — undecided which, hence discussion-stage.
+- [x] ~~Phase 1: folder fallback~~ — done, `decisions.md` #49.
+  `_infer_domain` now falls back to the vault's top-level folder name
+  before giving up to `"general"`. Honestly scoped: verified against the
+  real vault to change **zero** real notes today (every note in a topic
+  folder already has a tag), and doesn't touch `TCP.md` itself (root
+  note, no folder). A safety net for future folder-organized notes, not a
+  fix for the present gap. The real target — 790 real root-level notes
+  with neither domain frontmatter nor a tag, `TCP.md` among them — is
+  phases 2 and 4 below.
+- [x] ~~Phase 2: embeddings-based domain classifier~~ — done,
+  `decisions.md` #51. Writes `domain:` straight into vault frontmatter
+  (the user's explicit choice, against my recommendation of a
+  backend-owned cache) — the first place this project mutates the vault
+  instead of only reading it. Applied for real: 49 notes classified
+  clean into 19 real domains. Real gotcha found and fixed before touching
+  any file: the naive first pass used `infer_domain`'s existing tag
+  fallback for classes and picked up organizational meta-tags, not just
+  subject domains — `transconcept` (25 notes: `Object`, `Callback`,
+  `Event`...) nearly became a "domain" and pulled `JavaScript`/`WebSocket`
+  into it. Fixed with `MIN_CLASS_SIZE = 5` (kills one-off tag noise
+  automatically) and an explicit, user-confirmed `EXCLUDED_CLASS_DOMAINS`
+  set (`{"transconcept"}` today) for the well-populated-but-not-a-domain
+  case a count filter can't catch. `TCP.md` itself is still unclassified,
+  honestly — no `networking` class exists anywhere in the vault's real
+  domain signal for it to match against, a data gap, not a threshold one.
+- [x] ~~Discover new domains by clustering, seed `networking`~~ — done,
+  `decisions.md` #52. `TCP.md`'s cluster had no domain because
+  `networking` didn't exist as a domain anywhere in the vault, not
+  because of a threshold or matching problem — so a one-off clustering
+  pass (same embedding math as #51, grouping instead of matching) went
+  looking for real, coherent topics among the 741 still-unlabeled notes.
+  Found 9 clean clusters (≥5 notes each); user approved 8 as new domains
+  (`networking`, `linux`, `javascript`, `algorithms`, `databases`,
+  `computer-architecture`, `data-structures`, `bash-scripting`) and
+  explicitly excluded one non-technical cluster (`masculinity-and-society`
+  content) from the tutoring domain system. 70 notes seeded, then #51's
+  classifier re-run against the new classes matched 32 more on its own.
+  **`TCP.md` now reads `domain: networking`, confirmed directly** — the
+  case that started #49 is closed. Deferred, not decided: whether a note
+  can carry more than one domain — real schema change
+  (`MistakeEntry`/`SessionPlan`/`recommend_domain` are all single-`str`
+  today), not yet needed since none of the 9 candidate clusters actually
+  overlapped with each other.
+- [ ] **Phase 3: neighbor-vote inference (`related_notes`).** Has
+  substantially more real data to work with now (#52 added 8 domains,
+  102 more labeled notes) — not re-evaluated since #52 landed, worth
+  checking whether it still adds anything beyond what clustering-based
+  discovery already covers before scoping it further.
+- [ ] **Multiple domains per note** — surfaced in #52, not scoped.
+  `domain:` as a vault frontmatter list is a small, additive parsing
+  change; the real cost is everywhere `domain` is assumed to be a single
+  `str` today (`MistakeEntry`, `SessionPlan`, `recommend_domain`'s
+  rotation, the `tools.md` contract) — open questions like which
+  domain's spaced-repetition clock a shared mistake should update aren't
+  answered by the frontmatter change alone. Worth a real `decisions.md`
+  entry of its own if/when a note genuinely needs it, not bundled into
+  domain-inference work.
+- [x] ~~Phase 4: deprioritize `"general"` in `recommend_domain()`~~ —
+  done, `decisions.md` #50, picked up ahead of phase 2 by explicit user
+  choice (cheapest of the four, and the only one with real effect on
+  today's data). `"general"` now only wins the automatic-mode rotation
+  when it's the *only* domain with any tracked activity at all — verified
+  against a copy of the real `mistakes.db`: a `"general"` mistake
+  backdated 90 days (older than every real domain, enough to have won
+  under the old rule) still loses to `languages`.
 
 ## Improvement ideas — retrieval / knowledge graph
 

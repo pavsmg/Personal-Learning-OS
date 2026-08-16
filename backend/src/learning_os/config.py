@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     vault_path: Path
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     openai_realtime_model: str = "gpt-realtime-mini"
     openai_realtime_voice: str = "marin"
     db_path: Path = Path("data/mistakes.db")

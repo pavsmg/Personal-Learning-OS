@@ -26,6 +26,11 @@ def _get_client() -> OpenAI:
     return OpenAI(api_key=get_settings().openai_api_key)
 
 
+def embed_texts(texts: list[str]) -> list[list[float]]:
+    response = _get_client().embeddings.create(model=get_settings().openai_embedding_model, input=texts)
+    return [item.embedding for item in response.data]
+
+
 def chat_completion(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],

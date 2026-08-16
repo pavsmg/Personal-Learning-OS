@@ -14,7 +14,9 @@ from learning_os.sessions.service import (
 
 def write_vault(tmp_path, files: dict[str, str]):
     for name, content in files.items():
-        (tmp_path / name).write_text(content, encoding="utf-8")
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 
 def test_create_session_anchors_on_best_search_match(tmp_path, monkeypatch):
@@ -135,6 +137,36 @@ def test_create_session_defaults_domain_to_general_when_no_signal(tmp_path, monk
     plan = create_session("untagged note")
 
     assert plan.domain == "general"
+
+
+def test_create_session_infers_domain_from_folder_when_no_frontmatter_or_tag(tmp_path, monkeypatch):
+    write_vault(tmp_path, {"Chemistry/Periodic Table.md": "no frontmatter, no tag, just filed under a topic folder."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    plan = create_session("periodic table")
+
+    assert plan.domain == "chemistry"
+
+
+def test_create_session_normalizes_multi_word_folder_name_to_domain(tmp_path, monkeypatch):
+    write_vault(tmp_path, {"Signal Processing/Fourier Transform.md": "no frontmatter, no tag."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    plan = create_session("fourier transform")
+
+    assert plan.domain == "signal-processing"
+
+
+def test_create_session_frontmatter_domain_still_wins_over_folder(tmp_path, monkeypatch):
+    write_vault(
+        tmp_path,
+        {"Chemistry/Reaction Rate.md": "---\ndomain: kinetics\n---\nfrontmatter should win over the folder name."},
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    plan = create_session("reaction rate")
+
+    assert plan.domain == "kinetics"
 
 
 def test_create_session_automatic_mode_uses_recommend_review(tmp_path, monkeypatch):

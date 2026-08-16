@@ -5,6 +5,9 @@ from learning_os.mistakes.models import MasteryEstimate, MistakeEntry
 
 MIN_REVIEW_INTERVAL_DAYS = 1.0
 MAX_REVIEW_INTERVAL_DAYS = 14.0
+# Mirrors sessions/service.py's DEFAULT_DOMAIN -- not imported, since
+# sessions already depends on mistakes and importing back would cycle.
+UNTRACKED_DOMAIN = "general"
 
 
 def save_mistake(
@@ -158,7 +161,16 @@ def recommend_domain() -> str | None:
     globally worst-ranked concept regardless of domain: one domain with a
     stubbornly bad or frequently-recurring concept could dominate every
     automatic session indefinitely while other domains never got a turn.
-    Returns None if there's no mistake data for any domain yet."""
+    Returns None if there's no mistake data for any domain yet.
+
+    `UNTRACKED_DOMAIN` ("general") is excluded from the rotation whenever
+    at least one real domain has tracked activity: it isn't a domain
+    anyone chose, just where a note with no domain signal lands
+    (decisions.md #49) — letting it compete equally would give a vault
+    cataloguing gap a turn instead of an actual subject. Only returned
+    when it's the only domain with any tracked activity at all, the same
+    "real signal is absent" shape as _find_blind_spot_topic's cold-start
+    fallback."""
     mistakes = store.query_mistakes()
     if not mistakes:
         return None
@@ -169,4 +181,6 @@ def recommend_domain() -> str | None:
         if current is None or mistake.timestamp > current:
             last_seen[mistake.domain] = mistake.timestamp
 
-    return min(last_seen, key=lambda domain: last_seen[domain])
+    real_domains = {domain: seen for domain, seen in last_seen.items() if domain != UNTRACKED_DOMAIN}
+    candidates = real_domains or last_seen
+    return min(candidates, key=lambda domain: candidates[domain])

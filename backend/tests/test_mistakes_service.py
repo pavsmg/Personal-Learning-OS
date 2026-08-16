@@ -336,3 +336,23 @@ def test_recommend_domain_no_data_returns_none(tmp_path, monkeypatch):
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
 
     assert recommend_domain() is None
+
+
+def test_recommend_domain_skips_general_when_a_real_domain_exists(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    # "general" is the stalest domain by raw last-seen date, but it's not a
+    # domain anyone chose -- a real domain, even a more recently active one,
+    # should still win the rotation.
+    insert_mistake_at("Untagged note mistake", domain="general", confidence=0.5, days_ago=30)
+    insert_mistake_at("Real domain mistake", domain="classical-ml", confidence=0.5, days_ago=1)
+
+    assert recommend_domain() == "classical-ml"
+
+
+def test_recommend_domain_returns_general_when_it_is_the_only_domain_tracked(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Only tracked mistake", domain="general", confidence=0.5, days_ago=5)
+
+    assert recommend_domain() == "general"
