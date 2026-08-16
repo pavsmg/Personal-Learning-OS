@@ -2535,3 +2535,77 @@ wrote `domain:` into 64 more real notes (`UDP`, `JWT`, `init`,
 `HTTP requests`, `ARP`... — spot-checked `UDP.md`'s diff directly, a
 clean 4-line insertion). Unlabeled count: 639 → 575. All four phases of
 #49's plan are now built.
+
+---
+
+## 54. Lowering neighbor-vote to `min_votes=2`, with a real manual review instead of a blanket threshold change
+
+**Context:** Asked to lower #53's `min_votes` default (3) back to 2 and
+manually review the doubtful results, rather than accepting #53's
+tradeoff (fewer notes, no known errors) as final.
+
+**What manual review actually means here, not just re-running the
+threshold:** re-ran `classify_by_neighbor_vote(min_votes=2)` against the
+vault as it stood after #53 (575 unlabeled, more labeled neighbors
+available than when #53's own `min_votes` comparison was done) — 107
+candidates. Rather than trust confidence scores, read the real note
+content (not just titles) for every result that looked structurally
+risky: every exact `2/2` vote (highest risk, same shape as the
+`Windows`/`MS-DOS` cases #53 already found), plus every low-vote-share
+multi-way split. Found 18 real errors this way (~17% of the 107),
+several by actually opening the note rather than guessing from the
+title — `ultra-learning` reads as a self-directed study methodology
+(`Metalearning`/`Focus`/`Drill`/`Retrieval`...), not a `classical-ml`
+concept, but collided with ML's own "meta-learning" term through a
+same-named neighbor; `deep learning`'s own text says "subconjunto de
+Machine Learning," and a real `deep-learning` domain already exists, but
+lost the plurality to `agents-llm` by one vote; `Windows.md` is a
+genuinely empty note, so any domain assigned to it is meaningless.
+Confirmed several borderline cases as actually fine by reading them
+too — `device`/`storage device` both explicitly discuss the Linux `/dev`
+convention in their own text, so `linux` isn't a stretch there the way it
+was for `Windows`/`MS-DOS`.
+
+**Full list of the 18 excluded, by failure pattern:**
+- *Contrasted-with, not part-of* (the `Windows`/`MS-DOS` pattern from
+  #53, recurring): `Windows`, `Wininit.exe`, `MS-DOS`, `Comandos de
+  compilación Mingw` (targets Windows despite using GNU tools).
+- *Wrong domain entirely*: `GUI` → `bash-scripting` (the opposite of a
+  shell), `ultra-learning` → `classical-ml`, `deep learning` →
+  `agents-llm` (should be `deep-learning`, which exists), `client-server
+  model` → `databases` (a general architecture concept, not DB-specific).
+- *Too generic for any single domain*: `Python objects`, `PYTHON
+  ROADMAP`, `Python interpreter` (all → `agents-llm`, purely because
+  Phase 2's `agents-llm` class absorbed general "Python Tooling &
+  Libraries" notes — see the naming-scope caveat below), `programming
+  language`, `interface`, `server` (the most split vote of the whole run:
+  5 different domains competing, confidence 0.33 — the split itself was
+  the tell), `software application`, `USB flash drive`, `PCI devices`,
+  `stock firmware`.
+
+**Naming-scope pattern, not a new one — the same caveat #53 already
+raised for `linux`/macOS/Android, now visibly hitting `agents-llm`
+too:** several of the 18 exclusions trace back to a domain seeded in #52
+being broader in practice than its name suggests. `agents-llm` absorbed
+general Python-tooling notes during #52's clustering, which is why
+`Python objects`/`Python interpreter`/`PYTHON ROADMAP` all pulled
+`agents-llm` votes from real neighbors — not classifier noise, but a
+domain whose real membership is wider than its label. Not renamed or
+re-scoped here; flagged for whoever revisits domain naming next.
+
+**Decision:** Applied the other 89 (`107 - 18`) via the existing
+`apply_classifications`, no code changes — this was a manual curation
+pass over `classify_by_neighbor_vote(min_votes=2)`'s output, not a change
+to `DEFAULT_MIN_VOTES` (still 3) or any classifier logic. `min_votes=2`
+stays an explicit CLI override (`--min-votes 2`) for a human-reviewed run
+like this one, not the shipped default — #53's own finding (naive `>= 2`
+lets real mislabels through) still stands as the reason for that.
+
+**Status:** Decided (2026-08-16) — no new tests (curation, not logic;
+`classify_by_neighbor_vote` and `apply_classifications` are already
+covered by #51/#53's suite, 197 tests, still passing, untouched).
+Verified directly against the real vault: `Windows.md` and `deep
+learning.md` confirmed to still have no `domain:` (correctly excluded);
+`GRUB.md` confirmed to have `domain: linux` (correctly applied). Vault
+total: 1560 notes, **1074 (68.8%) now carry a real domain**, 486 (31.2%)
+still don't — up from 985/1560 (63.1%) before this entry.

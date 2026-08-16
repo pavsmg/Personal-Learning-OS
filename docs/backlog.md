@@ -162,6 +162,31 @@ Discussion-stage, none of these are scoped or decided yet (opened
   "Unix/OS-family fundamentals" than strictly Linux. Applied for real:
   64 more notes (`UDP`, `JWT`, `init`, `ARP`, `HTTP requests`...).
   Unlabeled count: 639 → 575.
+- [x] ~~Lower `min_votes` to 2 with real manual review~~ — done,
+  `decisions.md` #54. Re-running at `min_votes=2` gave 107 candidates;
+  read the actual note content (not just titles) for every structurally
+  risky one and found 18 real errors (~17%) — `Windows`/`MS-DOS`/
+  `Wininit.exe`/Mingw (contrasted-with-Linux, the same pattern #53 found),
+  `GUI`→bash-scripting and `client-server model`→databases (wrong domain
+  outright), `ultra-learning`→classical-ml (name collision with ML's
+  "meta-learning," it's actually a study-technique note), `deep
+  learning`→agents-llm (should be `deep-learning`, which exists, lost by
+  one vote), and several too-generic notes (`Python objects`/`PYTHON
+  ROADMAP`/`Python interpreter`/`programming language`/`interface`/
+  `server`/`software application`/`USB flash drive`/`PCI devices`/`stock
+  firmware`). The Python-related misses trace back to a real
+  naming-scope issue: `agents-llm` absorbed general Python-tooling notes
+  during #52's seeding, so it's broader in practice than its name
+  suggests — flagged, not fixed. Applied the other 89.
+  `DEFAULT_MIN_VOTES` stays 3; `--min-votes 2` is now documented as "use
+  with a real manual review," not a safe default. Vault total: **1074 of
+  1560 notes (68.8%) now carry a real domain**, up from 985 (63.1%).
+- [ ] **Revisit `agents-llm` and `linux`'s scope** — surfaced in #53
+  (macOS/Android → linux) and #54 (Python-tooling notes → agents-llm):
+  both domains, seeded during #52's clustering, read broader in practice
+  than their names suggest ("linux" closer to "Unix/OS fundamentals",
+  "agents-llm" pulling in general Python). Not fixed — a naming/rescoping
+  call for whoever revisits domain taxonomy next, not a classifier bug.
 - [ ] **Multiple domains per note** — surfaced in #52, not scoped.
   `domain:` as a vault frontmatter list is a small, additive parsing
   change; the real cost is everywhere `domain` is assumed to be a single

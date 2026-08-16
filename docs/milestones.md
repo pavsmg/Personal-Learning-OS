@@ -82,6 +82,40 @@ it (#45 documents both); `get_learning_statistics` is still a
 `NotImplementedError` stub; the FastAPI app exposes only `/` and
 `/health`, so none of the 18 tools are reachable over HTTP.
 
+**2026-08-16 session — #49–53, closing the `_infer_domain`-falls-to-
+`general` gap for real.** Found live: `_infer_domain` (renamed
+`infer_domain`, now public) had no signal at all for `TCP.md` — no
+frontmatter, no tag, no folder — so it fell to `"general"`, which then
+competed as a real domain inside `recommend_domain()`'s automatic-mode
+rotation. Fixed in four phases, all built, none skipped: #49 (folder
+fallback — verified to change **zero** real notes today, since every
+folder-organized note in the vault was already tagged; a safety net for
+future notes, not a fix for `TCP.md` itself); #50 (`"general"`
+deprioritized in `recommend_domain()` — only wins when it's the *only*
+domain with tracked activity, verified against a copy of the real
+`mistakes.db`); #51 (new `classification/` module + `uv run
+learning-os-classify-domains`, an embeddings classifier matching
+unlabeled notes against domains already in real use — the first place
+this project writes to the vault instead of only reading it, an explicit
+user choice against my own recommendation of a backend-owned cache; a
+real quality bug was caught and fixed *before* touching any file, where
+the naive first pass turned an organizational meta-tag [`transconcept`]
+into a fake "domain"); #52 (a clustering pass over the 741 remaining
+unlabeled notes surfaced 8 real, previously-untracked topics —
+`networking`, `linux`, `javascript`, `algorithms`, `databases`,
+`computer-architecture`, `data-structures`, `bash-scripting` — seeded
+with the user's approval, which is what actually closed the motivating
+case: `TCP.md` now reads `domain: networking`, confirmed by reading the
+file directly); #53 (neighbor-vote inference via `related_notes`,
+`--method neighbor-vote` on the same CLI — `min_votes` tuned against real
+data after the naive threshold let two real mislabels through). Real
+vault effect across the session: unlabeled-note count dropped from 790 to
+575. `uv run pytest` passes 197 tests. Deferred, not decided: whether a
+note can carry more than one domain (`backlog.md`) — a real schema change
+(`MistakeEntry`/`SessionPlan`/`recommend_domain` are single-`str`
+throughout today), not yet needed since no real note found so far
+genuinely needed two.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
