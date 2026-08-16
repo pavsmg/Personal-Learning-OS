@@ -2609,3 +2609,77 @@ learning.md` confirmed to still have no `domain:` (correctly excluded);
 `GRUB.md` confirmed to have `domain: linux` (correctly applied). Vault
 total: 1560 notes, **1074 (68.8%) now carry a real domain**, 486 (31.2%)
 still don't — up from 985/1560 (63.1%) before this entry.
+
+---
+
+## 55. Second clustering pass over neighbor-vote's "stuck" notes — four new domains, two folded into existing ones
+
+**Context:** Of the 486 notes still without a domain after #54, 164 sit in
+a specific dead end: they have real graph neighbors (so `#53`'s
+neighbor-vote isn't skipping them for lack of signal), but *none* of those
+neighbors carry a domain either — the exact shape of the original `TCP`
+problem `#49` opened with. Re-ran `#52`'s clustering approach (embed each
+note's title+body, greedy nearest-centroid clustering, similarity
+threshold 0.5), scoped to just these 164 notes instead of the whole vault.
+
+**Result:** 98 clusters, 81 of them singleton/pair noise. 17 clusters had
+3+ members. Presented each real cluster's actual titles to the user
+(not just a proposed name) and got an explicit decision per cluster,
+rather than assuming size alone justifies a new domain:
+
+- **`python` (new, 5 notes)** — CPython, Global Interpreter Lock, PyPy,
+  IPython, bytecode. No `python` domain existed; without one, these would
+  have drifted into `agents-llm` by neighbor-vote later, repeating the
+  exact naming-scope problem `#54` just flagged for that domain. Creating
+  this domain doesn't fix already-mislabeled `agents-llm` notes (that's
+  still the open "revisit `agents-llm`/`linux` scope" backlog item), but
+  stops it from getting worse going forward.
+- **`frontend` (new, 8 notes)** — Create React App, React Project
+  Structure Reference, Vite, Virtual DOM, Rendering (5, one cluster) +
+  TailwindCSS, CSS, CSS box model (3, a second cluster, same domain by
+  user choice). Kept separate from the existing `javascript` (12 notes)
+  domain rather than folded in — user's call, on the reasoning that
+  React/CSS is libraries-and-styling, not the language itself.
+- **`software-engineering` (new, 9 notes)** — three small clusters folded
+  into one domain by user choice: Microservices/Microservice/Software
+  architecture; Software Development Kit/Software development/Integrated
+  Development Environment; Software Quality Standards/Models. Meta/generic
+  content, similar in kind to what `#51` excluded via
+  `EXCLUDED_CLASS_DOMAINS` — created anyway per explicit user decision,
+  not by the classifier's own default judgment.
+- **`personal-development` (new, 11 notes)** — Tactical masculine virtues,
+  Ser un buen hombre, Sustitutos de la masculinidad, Societal analysis, Lo
+  que está pasando, Honor, Male role according to psychology, Evolutionary
+  psychology, Maestría o dominio, Masculinity crisis, Coraje. The first
+  non-technical domain in the system. Two smaller non-technical clusters
+  found in the same pass — dance (3 notes: Dancing, Bachata, Cumbia) and
+  personal finance (3 notes, Spanish: Presupuesto de proyectos, Costo de
+  venta, Gastos) — were explicitly left unlabeled: user chose to include
+  only the 11-note cluster, both because of its size and because the
+  smaller two sit right at `MIN_CLASS_SIZE`.
+- **Folded into existing domains, not asked as a separate question** (low
+  stakes, unambiguous fit): MIMD/SISD/Flynn Taxonomy (3) and
+  Mutex/race condition/semaphore (3) → `computer-architecture`, already
+  the closest existing home for CPU/systems content, +6 total; X Window
+  System/Linux compositor/Hyprland (3) → `linux`, +3.
+- **Left alone, not proposed as anything:** a 4-note cluster ("PLAN",
+  "ENLARGEMENT", "Detailed description of device measures", "General
+  advice TD") too ambiguous to confidently name — didn't read the notes
+  or guess a label, just excluded it from the batch. Also skipped:
+  Unicode/UTF-8/encoding (5 notes, too generic for a domain of its own,
+  same reasoning as `#51`'s exclusions), `.csv`/`.tsv`/file format (3,
+  too small), Scientific knowledge/Science/Metodología (3, too generic).
+
+**Decision:** Applied 42 total classifications via the existing
+`apply_classifications` — no code changes, this is data curation +
+extending the set of known domains, same pattern as `#52`'s seeding.
+
+**Status:** Decided (2026-08-16). `uv run pytest`: 197 passed, unchanged
+(no logic touched). Vault total: 1560 notes, **1116 (71.5%) now carry a
+real domain**, up from 1074/1560 (68.8%) before this entry. Vault git repo
+committed separately (271 pure-frontmatter files from `#54`'s batch, then
+this entry's 42 — both verified programmatically to be *only* a `domain:`
+frontmatter addition with zero other diff, to avoid entangling with the
+user's own concurrent note-writing in the same repo); ~40 notes where my
+`domain:` write landed in the same file as unrelated user content edits
+were deliberately left uncommitted for the user's own review.

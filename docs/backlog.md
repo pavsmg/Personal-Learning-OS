@@ -181,6 +181,28 @@ Discussion-stage, none of these are scoped or decided yet (opened
   `DEFAULT_MIN_VOTES` stays 3; `--min-votes 2` is now documented as "use
   with a real manual review," not a safe default. Vault total: **1074 of
   1560 notes (68.8%) now carry a real domain**, up from 985 (63.1%).
+- [x] ~~Second clustering pass over neighbor-vote's "stuck" notes~~ —
+  done, `decisions.md` #55. Of 486 remaining unlabeled notes, 164 have
+  real graph neighbors but none of them carry a domain either — the
+  original `TCP` shape. Re-ran #52's clustering scoped to just those 164;
+  found 17 real clusters (3+ members) out of 98 total. Presented each
+  cluster's actual titles to the user per decision, not auto-approved by
+  size: `python` (new, 5 notes — otherwise would've drifted into
+  `agents-llm` later, same naming-scope problem #54 just flagged),
+  `frontend` (new, 8 notes — React/Vite/CSS, kept separate from the
+  existing `javascript` domain by user choice), `software-engineering`
+  (new, 9 notes across 3 small meta clusters — Microservices/SDK/IDE/
+  Software Quality), `personal-development` (new, 11 notes — the first
+  non-technical domain in the system; two smaller non-technical clusters,
+  dance and personal finance, 3 notes each, were explicitly left out).
+  Two more clusters folded into existing domains without a separate
+  question (unambiguous fit): Flynn Taxonomy/Mutex-semaphore-race-
+  condition → `computer-architecture` (+6), X Window/compositor/Hyprland
+  → `linux` (+3). Left alone: a 4-note cluster too ambiguous to name
+  ("PLAN", "ENLARGEMENT"...) — not read, not guessed at; Unicode/encoding
+  and a couple other small generic clusters, same reasoning as #51's
+  exclusions. 42 applied total. Vault total: **1116 of 1560 (71.5%)**, up
+  from 1074 (68.8%).
 - [ ] **Revisit `agents-llm` and `linux`'s scope** — surfaced in #53
   (macOS/Android → linux) and #54 (Python-tooling notes → agents-llm):
   both domains, seeded during #52's clustering, read broader in practice
