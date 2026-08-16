@@ -2481,3 +2481,57 @@ against the real vault directly: 102 more real notes now carry a real
 `domain:` (70 seeded + 32 classified against the new classes), unlabeled
 count dropped from 741 to 639, and `TCP.md` — read directly, not
 assumed — now says `domain: networking`.
+
+---
+
+## 53. Phase 3: neighbor-vote inference (`related_notes`)
+
+**Context:** Last of #49's four phases. `backlog.md` had flagged it as
+possibly redundant with #52's clustering — checked against the real vault
+before writing any code, not assumed: with the domains #51/#52 already
+seeded, 344 of the 639 still-unlabeled notes have at least one real
+neighbor with a domain, and 292 have a clear plurality among them. Real
+signal, worth building.
+
+**Decision:** New `classification/neighbor_vote.py`,
+`classify_by_neighbor_vote(vault_path, min_votes)`. For each note
+`infer_domain` leaves at `general`, collects the real domain of every
+graph neighbor (`VaultIndex.related` — mutual/outgoing/incoming tiers,
+combined, run against a local index built from the same `load_vault` call
+rather than the cached global one, matching #51's pattern), excluding
+neighbors with no domain or with a domain in `EXCLUDED_CLASS_DOMAINS`
+(same list #51 built for `transconcept`). Assigns the plurality domain if
+it clears `min_votes` and isn't tied with another domain; confidence is
+vote share, not a similarity score, but read by `apply_classifications`
+the same way regardless of which method produced it.
+`learning-os-classify-domains` gained `--method {embeddings,neighbor-vote}`
+rather than a second CLI — same action (classify unlabeled notes),
+different signal, same writer underneath.
+
+**`min_votes` tuned against real evidence, not guessed:** the naive
+threshold (`>= 2` votes, no tie) produced 123 real matches, but manual
+review of the list surfaced two real mislabels — `Windows` and `MS-DOS`
+both matched `linux` at 2/2, because both are *contrasted with* Linux in
+their linking notes, not part of it. Raising the bar to `>= 3` (this
+module's default) dropped the result to 64 and removed both mislabels on
+review — nothing that looked wrong at `>= 2` survived being wrong at
+`>= 3`, and nothing that looked right at `>= 2` was lost either.
+
+**Two honest borderline cases left in, not silently smoothed over:**
+`macOS` and `Android` both matched `linux` at full 1.00 confidence (every
+labeled neighbor agreed) — not noise, but a real naming-scope question:
+neither is actually Linux, and the `linux` domain #52 seeded reads more
+like "Unix/OS-family fundamentals" in practice than strictly Linux
+itself. Not fixed here — flagged to the user, who chose to apply them
+as-is rather than have me unilaterally rename or exclude.
+
+**Status:** Decided (2026-08-16) — 197 tests pass (5 new: clear-plurality
+classification, a tied vote produces no result, below-`min_votes` is
+excluded (and the same case passes at a lower `min_votes`),
+`EXCLUDED_CLASS_DOMAINS` neighbors don't count toward the vote or its
+denominator, and a note with no neighbors stays unclassified). Applied
+for real against the real vault, confirmed with the user first: `--apply`
+wrote `domain:` into 64 more real notes (`UDP`, `JWT`, `init`,
+`HTTP requests`, `ARP`... — spot-checked `UDP.md`'s diff directly, a
+clean 4-line insertion). Unlabeled count: 639 → 575. All four phases of
+#49's plan are now built.

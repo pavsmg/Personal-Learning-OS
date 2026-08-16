@@ -1,5 +1,6 @@
 import argparse
 
+from learning_os.classification.neighbor_vote import DEFAULT_MIN_VOTES, classify_by_neighbor_vote
 from learning_os.classification.service import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     apply_classifications,
@@ -11,15 +12,31 @@ def run() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Classify vault notes that infer_domain would leave at 'general' into a real "
-            "domain, by embedding similarity against domains already in use elsewhere in "
-            "the vault. Dry run by default -- pass --apply to actually write."
+            "domain already in use elsewhere in the vault. Dry run by default -- pass "
+            "--apply to actually write."
         )
+    )
+    parser.add_argument(
+        "--method",
+        choices=["embeddings", "neighbor-vote"],
+        default="embeddings",
+        help=(
+            "'embeddings': match by embedding similarity against domain centroids. "
+            "'neighbor-vote': inherit a domain from a clear plurality among the note's real "
+            "graph neighbors (related_notes). Default: %(default)s."
+        ),
     )
     parser.add_argument(
         "--threshold",
         type=float,
         default=DEFAULT_CONFIDENCE_THRESHOLD,
-        help="Minimum cosine similarity to accept a classification (default: %(default)s).",
+        help="embeddings only: minimum cosine similarity to accept a classification (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--min-votes",
+        type=int,
+        default=DEFAULT_MIN_VOTES,
+        help="neighbor-vote only: minimum agreeing neighbors required (default: %(default)s).",
     )
     parser.add_argument(
         "--apply",
@@ -28,9 +45,13 @@ def run() -> None:
     )
     args = parser.parse_args()
 
-    results = classify_unlabeled_notes(threshold=args.threshold)
+    if args.method == "embeddings":
+        results = classify_unlabeled_notes(threshold=args.threshold)
+    else:
+        results = classify_by_neighbor_vote(min_votes=args.min_votes)
+
     if not results:
-        print("No notes classified above the confidence threshold.")
+        print("No notes classified.")
         return
 
     for result in sorted(results, key=lambda r: -r.confidence):

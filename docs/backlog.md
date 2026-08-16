@@ -148,11 +148,20 @@ Discussion-stage, none of these are scoped or decided yet (opened
   (`MistakeEntry`/`SessionPlan`/`recommend_domain` are all single-`str`
   today), not yet needed since none of the 9 candidate clusters actually
   overlapped with each other.
-- [ ] **Phase 3: neighbor-vote inference (`related_notes`).** Has
-  substantially more real data to work with now (#52 added 8 domains,
-  102 more labeled notes) — not re-evaluated since #52 landed, worth
-  checking whether it still adds anything beyond what clustering-based
-  discovery already covers before scoping it further.
+- [x] ~~Phase 3: neighbor-vote inference (`related_notes`)~~ — done,
+  `decisions.md` #53, all four of #49's phases now built. Checked first
+  whether it still added anything beyond #52's clustering: yes, 292 of
+  the 639 remaining notes had a clear plurality domain among their real
+  graph neighbors. `min_votes` tuned against real evidence, not guessed —
+  `>= 2` produced 123 matches but included two real mislabels
+  (`Windows`/`MS-DOS` → `linux`, from being *contrasted with* Linux, not
+  part of it); `>= 3` (the shipped default) dropped to 64 and removed
+  both on manual review. Two honest borderline cases applied as-is by
+  user choice: `macOS`/`Android` → `linux` at full confidence — not
+  noise, but a sign the `linux` domain #52 seeded reads more like
+  "Unix/OS-family fundamentals" than strictly Linux. Applied for real:
+  64 more notes (`UDP`, `JWT`, `init`, `ARP`, `HTTP requests`...).
+  Unlabeled count: 639 → 575.
 - [ ] **Multiple domains per note** — surfaced in #52, not scoped.
   `domain:` as a vault frontmatter list is a small, additive parsing
   change; the real cost is everywhere `domain` is assumed to be a single
