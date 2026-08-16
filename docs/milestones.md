@@ -116,6 +116,40 @@ note can carry more than one domain (`backlog.md`) — a real schema change
 throughout today), not yet needed since no real note found so far
 genuinely needed two.
 
+**Same 2026-08-16 session, continued — #54–55, two more real passes over
+the domain-tagging gap.** #54: lowered neighbor-vote's `min_votes` from 3
+to 2 for one manually-reviewed run rather than as a new default — 107
+candidates, read the actual note content (not titles) for every
+structurally risky one, found 18 real errors (~17%, mostly the
+"contrasted-with-not-part-of" pattern #53 already knew about, plus a
+naming-scope issue where `agents-llm` pulls in general Python-tooling
+notes), applied the other 89. `DEFAULT_MIN_VOTES` stays 3.
+#55: of the notes still unlabeled, 164 have real graph neighbors but none
+of *those* carry a domain either (the original `TCP` shape) — re-ran #52's
+clustering scoped to just that set. 17 real clusters found; each one's
+actual titles (not a guessed name) were shown to the user for a per-
+cluster decision, not auto-approved by size. Result: 4 new domains
+(`python`, `frontend`, `software-engineering`, `personal-development` —
+the first non-technical domain in the system) and two folds into existing
+domains (`computer-architecture`, `linux`), 42 notes applied; one 4-note
+cluster too ambiguous to name was left alone rather than guessed at.
+Vault-wide domain coverage: 985/1560 (63.1%) before #54 → 1074/1560
+(68.8%) after #54 → **1116/1560 (71.5%)** after #55, i.e. 444 notes still
+unlabeled. `uv run pytest`: 197 passed throughout, no code changes in
+#54/#55 (pure data curation). Open,
+flagged not fixed: `agents-llm`/`linux`'s scope reads broader than their
+names suggest (`backlog.md`); multiple-domains-per-note still deferred.
+**Vault-repo housekeeping note for next session:** the vault
+(`~/Documents/Obsidian-Digital-Brain`, a separate git repo) had ~350
+uncommitted files by the end of this session — some mine (`domain:`
+frontmatter, committed in two clean batches: 271 then 42, both verified
+to contain *only* a frontmatter addition), most the user's own concurrent
+note-writing (new notes, vault `CLAUDE.md` edits, ~40 notes where my
+`domain:` write landed in the same file as the user's own content edits).
+Left the non-mine ~82 for the user's own review/commit rather than
+bundling it — if a future session is asked to commit "the vault," don't
+assume everything uncommitted there is this project's doing.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
