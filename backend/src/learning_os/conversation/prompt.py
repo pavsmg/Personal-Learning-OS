@@ -19,6 +19,7 @@ Today's session:
 - Domain: {domain}
 - Objective: {objective}
 - Concepts to cover: {concepts}
+- Starting point: {starting_point}
 
 Rules you must actually follow, not just acknowledge:
 1. Ask questions and request explanations in the learner's own words before \
@@ -112,11 +113,35 @@ covered once the learner has handled that follow-up too.
 """
 
 
+# decisions.md #43: states where to start the questioning, not a
+# competence level to announce to the learner -- "advanced" would read as
+# a claim the failures-only mistake store can't back. Keyed by
+# SessionPlan.target_difficulty; falls back to the raw value for any
+# label these guidances haven't been written for yet.
+_STARTING_POINT_GUIDANCE = {
+    "foundational": (
+        "foundational -- no solid tracked evidence for these concepts yet. "
+        "Open from mechanism and definitions; don't assume prior mastery."
+    ),
+    "consolidating": (
+        "consolidating -- mixed evidence: some of today's concepts already show "
+        "real tracked understanding, others don't. Start the shakier ones from "
+        "the basics, but don't re-explain what's already been demonstrated."
+    ),
+    "extending": (
+        "extending -- these concepts already show solid tracked understanding. "
+        "Skip the definitions and open with a rule-11 applicative scenario "
+        "instead of retesting basics."
+    ),
+}
+
+
 def build_system_prompt(plan: SessionPlan) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
         domain=plan.domain,
         objective=plan.objective,
         concepts=", ".join(plan.concepts),
+        starting_point=_STARTING_POINT_GUIDANCE.get(plan.target_difficulty, plan.target_difficulty),
     )
 
 

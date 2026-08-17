@@ -9,11 +9,28 @@ from learning_os.retrieval import concept_importance, get_note, most_important_n
 from learning_os.retrieval.models import Note
 from learning_os.sessions.models import SessionPlan, SessionSummary
 
-DEFAULT_TARGET_DIFFICULTY = "beginner"
+DEFAULT_TARGET_DIFFICULTY = "foundational"
 DEFAULT_DOMAIN = "general"
 MINUTES_PER_CONCEPT = 5
 MINIMUM_DURATION_MINUTES = 15
 BLIND_SPOT_SCAN_LIMIT = 20
+# decisions.md #43, v1 constant, not tuned: splits shaky/settled on
+# conceptual_understanding. Checked against today's real mistakes.db (10
+# tracked pairs): 0.02-0.41 (mostly single wrong-with-high-confidence
+# guesses) lands shaky, 0.6-0.85 (single low-confidence slips) lands
+# settled, with nothing sitting near the boundary either way. A tie at
+# the boundary favors settled -- deeper questioning, not a retreat to
+# basics, per pedagogy.md's desirable-difficulty point that smooth
+# sessions are the failure mode. Revisit both this and the aggregation
+# below (_target_difficulty) once there's enough real evidence per domain
+# to tune against instead of reason from a handful of points.
+SHAKY_SETTLED_THRESHOLD = 0.5
+# Same v1-constant caveat as SHAKY_SETTLED_THRESHOLD: shaky concepts cost
+# more session time than settled ones, settled cost less than the
+# untracked baseline (MINUTES_PER_CONCEPT) -- direction is principled,
+# the exact minutes aren't fit to anything.
+MINUTES_SHAKY_CONCEPT = 7
+MINUTES_SETTLED_CONCEPT = 3
 # Naive v1: ratios within the same 0.25-wide band count as "similarly
 # overdue," same spirit as MIN/MAX_REVIEW_INTERVAL_DAYS and BM25_K1
 # elsewhere -- not tuned against real data, a defensible starting point.
@@ -85,6 +102,61 @@ def _language_concepts(language: str, max_concepts: int) -> list[str]:
     return (active or curriculum)[:max_concepts]
 
 
+def _evidence_classes(domain: str, concepts: list[str]) -> list[str]:
+    """Classifies each planned concept as "untracked" (no real mistake
+    evidence at all), "shaky", or "settled" (split on conceptual_understanding
+    at SHAKY_SETTLED_THRESHOLD) -- decisions.md #43. Case-insensitive lookup,
+    same pattern as _find_blind_spot_topic; a concept that doesn't match any
+    tracked entry (e.g. a Language-Lab curriculum label with no mistake
+    recorded under that exact string) honestly falls to "untracked" rather
+    than guessing."""
+    profile = {estimate.concept.lower(): estimate for estimate in get_learning_profile(domain=domain)}
+    classes = []
+    for concept in concepts:
+        estimate = profile.get(concept.lower())
+        if estimate is None:
+            classes.append("untracked")
+        elif estimate.conceptual_understanding >= SHAKY_SETTLED_THRESHOLD:
+            classes.append("settled")
+        else:
+            classes.append("shaky")
+    return classes
+
+
+def _target_difficulty(evidence: list[str]) -> str:
+    """Session-level depth label from per-concept evidence classes
+    (decisions.md #43) -- untracked concepts don't vote either way, since
+    absence of evidence isn't evidence of anything. No tracked concepts at
+    all keeps today's honest default (foundational); a mix of shaky and
+    settled concepts -- the common case once a session has more than one
+    or two concepts -- lands on "consolidating" rather than letting either
+    extreme dominate."""
+    tracked = [evidence_class for evidence_class in evidence if evidence_class != "untracked"]
+    if not tracked:
+        return DEFAULT_TARGET_DIFFICULTY
+    if all(evidence_class == "settled" for evidence_class in tracked):
+        return "extending"
+    if all(evidence_class == "shaky" for evidence_class in tracked):
+        return "foundational"
+    return "consolidating"
+
+
+_MINUTES_BY_EVIDENCE_CLASS = {
+    "untracked": MINUTES_PER_CONCEPT,
+    "shaky": MINUTES_SHAKY_CONCEPT,
+    "settled": MINUTES_SETTLED_CONCEPT,
+}
+
+
+def _expected_duration(evidence: list[str]) -> int:
+    """Minutes sized per concept by its evidence class rather than a flat
+    rate (decisions.md #43) -- shaky concepts cost more time than settled
+    ones. Stays out of the system prompt deliberately (a visible minute
+    budget invites clock-watching, which fights rules 2 and 11); this is a
+    planning/telemetry value only."""
+    return max(MINIMUM_DURATION_MINUTES, sum(_MINUTES_BY_EVIDENCE_CLASS[evidence_class] for evidence_class in evidence))
+
+
 def _find_blind_spot_topic() -> str | None:
     """A foundational vault concept (highest backlink count) with zero
     tracked mistakes anywhere -- for the automatic-mode cold-start case,
@@ -122,9 +194,10 @@ def _prioritize_by_importance(ranked: list[tuple[str, float]]) -> list[str]:
 
 def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPlan:
     """Naive v1 heuristic: anchor on the best search match, expand via
-    related_notes. target_difficulty/expected_duration_minutes are fixed
-    defaults for now — mistake/mastery data alone doesn't say how hard a
-    session should be or how long it should run.
+    related_notes. target_difficulty/expected_duration_minutes derive from
+    each planned concept's real tracked evidence via _evidence_classes
+    (decisions.md #43) -- untracked concepts fall back to today's honest
+    default rather than a guess.
 
     Automatic mode (topic=None): the effective topic comes from
     recommend_domain()'s pick — whichever domain has gone longest without
@@ -193,15 +266,15 @@ def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPl
     if is_blind_spot_pick:
         objective = f"Explore {anchor_title} — a foundational concept not yet reviewed"
 
-    duration = max(MINIMUM_DURATION_MINUTES, MINUTES_PER_CONCEPT * len(concepts))
+    evidence = _evidence_classes(domain, concepts)
 
     plan = SessionPlan(
         session_id=str(uuid.uuid4()),
         domain=domain,
         objective=objective,
         concepts=concepts,
-        target_difficulty=DEFAULT_TARGET_DIFFICULTY,
-        expected_duration_minutes=duration,
+        target_difficulty=_target_difficulty(evidence),
+        expected_duration_minutes=_expected_duration(evidence),
     )
     _SESSIONS[plan.session_id] = _SessionRecord(plan=plan)
     return plan

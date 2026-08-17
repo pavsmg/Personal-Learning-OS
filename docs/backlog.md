@@ -81,29 +81,27 @@ Discussion-stage, none of these are scoped or decided yet (opened
   domain — there's no Language-Lab equivalent for e.g. chemistry, but
   `mistakes.db` already has real per-domain mistake data a non-language
   planner path could lean on instead of pure `related_notes` traversal.
-- [ ] **Feed real mastery data into difficulty/duration** — scoped
-  2026-08-15, `decisions.md` #43 (Proposed): evidence classes rather than
-  an averaged scalar (the 1.0 default for untracked concepts makes an
-  average lie), depth-scoped labels instead of beginner/intermediate/
-  advanced, duration sized by evidence but kept out of the prompt. The
-  half that carries the value is that neither field currently has a
-  reader. Not built yet — but its untracked-concept workaround is no
-  longer needed: `estimate_mastery` now reports absence directly
-  (`decisions.md` #45). Original note:
-  `target_difficulty` is hardcoded `"beginner"` always;
-  `expected_duration_minutes` is purely `5 × concept_count`. Both were
-  explicitly flagged as provisional back in Milestone 4 ("until Milestone
-  6 gives mastery data to inform them for real") — Milestone 6 shipped
-  that data; the planner never came back to use it.
+- [x] ~~Feed real mastery data into difficulty/duration~~ — done,
+  `decisions.md` #43. Evidence classes (`untracked`/`shaky`/`settled`,
+  split at 0.5 on `conceptual_understanding`) replace the averaged scalar;
+  `target_difficulty` aggregates a session's concepts to
+  `foundational`/`consolidating`/`extending`; duration is sized per-class
+  (shaky costs more minutes than settled) and stays out of the prompt.
+  Wired into `SYSTEM_PROMPT_TEMPLATE` via a new `Starting point:` line, so
+  the values actually get read, not just computed. Thresholds and the
+  none/all/mixed aggregation are v1 constants checked against real data
+  (10 tracked pairs today) but not tuned — flagged in the decision entry
+  as the first thing worth revisiting once real session volume gives more
+  than one or two tracked concepts per domain.
 
 - [ ] **Evidence memory (two-sided evidence + Anki-comparable
   scheduler)** — proposed 2026-08-15, `decisions.md` #44. Record what goes
   *right*, not only what goes wrong, graded once per session from the
   transcript; per-concept stability/difficulty on FSRS semantics with
   fixed constants rather than per-user fitting. Would also close the
-  voice-can't-save-mistakes gap (#22) as a side effect. Staged behind
-  #43's fix, real session volume, and a `pedagogy.md` section — the
-  binding constraint is data, not algorithm.
+  voice-can't-save-mistakes gap (#22) as a side effect. #43 shipped
+  (2026-08-16); still staged behind real session volume and a
+  `pedagogy.md` section — the binding constraint is data, not algorithm.
 
 - [x] ~~Phase 1: folder fallback~~ — done, `decisions.md` #49.
   `_infer_domain` now falls back to the vault's top-level folder name

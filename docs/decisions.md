@@ -1798,13 +1798,36 @@ concepts genuinely differ — but it needs a new `SessionPlan` field and a
 `domain-model.md` change, which is a separate decision from the one this
 entry closes. Named here so it doesn't get silently absorbed.
 
-**Status:** Proposed (2026-08-15) — scoped, not yet built. Thresholds will
-be v1 constants stated with their reasoning rather than tuned: today's
-store holds 10 tracked (domain, concept) pairs, 8 of them with a single
-mistake, understanding spanning 0.02–0.85 — enough to sanity-check a
-mapping against (`Gradient descent` at 0.03 must come out foundational),
-nowhere near enough to fit a threshold to, the same position
-`OVERDUE_TIE_BUCKET_SIZE` was in.
+**Status:** Decided (2026-08-16) — built. `sessions/service.py` gained
+`_evidence_classes` (per-concept untracked/shaky/settled, split at
+`SHAKY_SETTLED_THRESHOLD = 0.5` on `conceptual_understanding`),
+`_target_difficulty` (the none/all-shaky/all-settled/mixed → foundational/
+foundational/extending/consolidating aggregation described above), and
+`_expected_duration` (per-class minutes: `MINUTES_SHAKY_CONCEPT = 7` >
+`MINUTES_PER_CONCEPT = 5` (untracked baseline) > `MINUTES_SETTLED_CONCEPT
+= 3`, 15-minute floor kept). `create_session` now calls these instead of
+the flat `DEFAULT_TARGET_DIFFICULTY`/`5 × concept_count`.
+`conversation/prompt.py` gained the second half — a `Starting point:`
+line in `SYSTEM_PROMPT_TEMPLATE` plus `_STARTING_POINT_GUIDANCE`, wired
+through `build_system_prompt` — closing the "no reader" gap the Context
+section named; duration deliberately stays out of the prompt, per point 3
+above.
+
+Checked against real data before picking 0.5: today's store's 10 tracked
+pairs (understanding 0.02–0.85) split cleanly either side of that line,
+nothing sitting near the boundary — see `SHAKY_SETTLED_THRESHOLD`'s
+comment in `sessions/service.py` for the actual numbers. That's also this
+decision's honest limit: 10 pairs, mostly domains with a single tracked
+concept, is enough to sanity-check the split (`Gradient descent` at 0.03
+correctly lands shaky) but not enough to tell whether 0.5, the flat
+none/all/mixed aggregation, or the 7/5/3-minute split are the *right*
+constants rather than just defensible ones — likely the first things
+worth revisiting once real session volume (the same constraint #44 is
+staged behind) gives more than one or two tracked concepts per domain to
+check the mapping against. `uv run pytest`: 203 passed (197 before this
+entry — 6 new tests: 3 for the evidence-class aggregation/duration split
+in `test_sessions_service.py`, 3 for the prompt wiring in the new
+`test_conversation_prompt.py`).
 
 ---
 

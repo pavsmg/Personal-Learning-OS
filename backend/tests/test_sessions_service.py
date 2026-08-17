@@ -36,7 +36,7 @@ def test_create_session_anchors_on_best_search_match(tmp_path, monkeypatch):
     assert plan.concepts[0] == "Gradient descent"
     assert set(plan.concepts[1:]) <= {"Optimizer", "Learning rate"}
     assert "Gradient descent" in plan.objective
-    assert plan.target_difficulty == "beginner"
+    assert plan.target_difficulty == "foundational"
     assert plan.expected_duration_minutes >= 15
     assert uuid.UUID(plan.session_id)
 
@@ -420,3 +420,111 @@ def test_create_session_falls_back_to_vault_notes_when_curriculum_empty(tmp_path
     assert plan.domain == "german"
     assert plan.concepts[0] == "German basics"
     assert "curriculum" not in plan.objective
+
+
+def test_create_session_target_difficulty_extending_when_all_concepts_settled(tmp_path, monkeypatch):
+    write_vault(
+        tmp_path,
+        {
+            "Gradient descent.md": "---\ndomain: classical-ml\n---\nlinked to [[Optimizer]].",
+            "Optimizer.md": "general term for optimization algorithms.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+
+    for concept in ("Gradient descent", "Optimizer"):
+        save_mistake(
+            concept=concept,
+            explanation="minor slip",
+            category="conceptual",
+            severity="minor",
+            confidence=0.1,  # understanding 0.9, well above SHAKY_SETTLED_THRESHOLD
+            domain="classical-ml",
+        )
+
+    plan = create_session("gradient descent", max_concepts=2)
+
+    assert plan.target_difficulty == "extending"
+
+
+def test_create_session_target_difficulty_consolidating_when_evidence_is_mixed(tmp_path, monkeypatch):
+    write_vault(
+        tmp_path,
+        {
+            "Gradient descent.md": "---\ndomain: classical-ml\n---\nlinked to [[Optimizer]].",
+            "Optimizer.md": "general term for optimization algorithms.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+
+    save_mistake(
+        concept="Gradient descent",
+        explanation="thought it always converges",
+        category="conceptual",
+        severity="minor",
+        confidence=0.9,  # understanding 0.1, shaky
+        domain="classical-ml",
+    )
+    save_mistake(
+        concept="Optimizer",
+        explanation="minor slip",
+        category="conceptual",
+        severity="minor",
+        confidence=0.1,  # understanding 0.9, settled
+        domain="classical-ml",
+    )
+
+    plan = create_session("gradient descent", max_concepts=2)
+
+    assert plan.target_difficulty == "consolidating"
+
+
+def test_create_session_duration_costs_more_for_shaky_than_settled_concepts(tmp_path, monkeypatch):
+    # 4 concepts so the per-class minute totals clear MINIMUM_DURATION_MINUTES
+    # (a single concept would floor both scenarios to the same 15-minute
+    # minimum and hide the difference this test is checking for).
+    write_vault(
+        tmp_path,
+        {
+            "Hub.md": "---\ndomain: classical-ml\n---\nlinked to [[A]], [[B]], [[C]].",
+            "A.md": "a",
+            "B.md": "b",
+            "C.md": "c",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    from learning_os.mistakes.service import save_mistake
+
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "shaky.db"))
+    from learning_os.config import get_settings
+
+    get_settings.cache_clear()
+    for concept in ("Hub", "A", "B", "C"):
+        save_mistake(
+            concept=concept,
+            explanation="thought it always converges",
+            category="conceptual",
+            severity="minor",
+            confidence=0.9,  # understanding 0.1, shaky
+            domain="classical-ml",
+        )
+    shaky_plan = create_session("Hub", max_concepts=4)
+
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "settled.db"))
+    get_settings.cache_clear()
+    for concept in ("Hub", "A", "B", "C"):
+        save_mistake(
+            concept=concept,
+            explanation="minor slip",
+            category="conceptual",
+            severity="minor",
+            confidence=0.1,  # understanding 0.9, settled
+            domain="classical-ml",
+        )
+    settled_plan = create_session("Hub", max_concepts=4)
+
+    assert shaky_plan.expected_duration_minutes > settled_plan.expected_duration_minutes

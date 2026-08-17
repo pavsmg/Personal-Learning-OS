@@ -174,6 +174,35 @@ rescoping — the embeddings weren't wrong, the flat per-domain-name
 classing was. Vault repo: committed as a single clean commit (46 files);
 project repo: `decisions.md` #56 + `backlog.md` updated in this pass.
 
+**Same 2026-08-16 session, continued a third time — #43 shipped, real
+code this time (everything from #49 through #56 was data curation).**
+`target_difficulty`/`expected_duration_minutes` were fixed defaults since
+Milestone 4; now `sessions/service.py` classifies each planned concept as
+`untracked`/`shaky`/`settled` (split at `SHAKY_SETTLED_THRESHOLD = 0.5`
+on `conceptual_understanding`, checked against the real `mistakes.db`'s
+10 tracked pairs before picking that number) and aggregates a session's
+concepts to `foundational`/`consolidating`/`extending`
+(none-tracked/all-shaky → foundational, all-settled → extending, mixed →
+consolidating — the likely-common case once a session has more than one
+or two concepts). Duration is now per-class minutes (shaky costs more
+than settled) instead of a flat `5 × concept_count`, floor unchanged at
+15. Wired the half that actually carries value: `build_system_prompt`
+gained a `Starting point:` line so the model gets told where to open
+from, not just handed a value nothing read (`create_session` computed
+`target_difficulty` before this and nothing downstream ever consumed it).
+Two new tests files' worth of coverage: 3 tests on the aggregation/
+duration split in `test_sessions_service.py`, 3 on the prompt wiring in
+new `test_conversation_prompt.py`. `uv run pytest`: 203 passed (197
+before). Documented as `decisions.md` #43 (flipped Proposed → Decided);
+`backlog.md`'s item closed, its explicit limit flagged in both places:
+0.5 and the aggregation rule are checked against today's 10 tracked
+pairs, not tuned — worth revisiting once real session volume gives more
+than one or two tracked concepts per domain. Explicitly deferred (named
+in #43, not started): per-concept evidence annotations in the prompt
+itself (e.g. "TCP (3 mistakes tracked)") — flattening a session to one
+label loses per-concept nuance; needs a new `SessionPlan` field and a
+`domain-model.md` change, a separate decision.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
