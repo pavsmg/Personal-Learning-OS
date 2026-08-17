@@ -48,6 +48,72 @@ The mechanisms with real evidence behind them, relevant to this project:
   should help, if the retrieval and planning layers actually mix domains
   rather than defaulting to single-topic sessions.
 
+## Two-sided evidence memory (proposed, `decisions.md` #44 — not built)
+
+Today `mistakes.db` only records failure: a wrong answer writes a row,
+nothing is written for a right one, and `MistakeEntry.corrected` never
+flips to `True`. `#43` had to invent an explicit `untracked` state instead
+of a score precisely because one number can't carry both "how much
+evidence exists" and "what that evidence says" when evidence only ever
+points one direction. `#44` proposes fixing that at the source — record
+successes too — and this section is the evidence-and-limitations check
+`CLAUDE.md` requires before anything in that direction gets built.
+
+**Why one-sided evidence is a real gap, not just an asymmetry.** Spaced
+repetition's actual mechanism — the one cited above — depends on
+*widening* an interval after a demonstrated success and *narrowing* it
+after a failure. A store that can only ever record failure can only ever
+narrow; today's linear 1–14-day map (`#32`) approximates the rest by
+assuming absence of a recent mistake means things are fine, which is a
+weaker signal than an actual confirmed recall. Recording successes isn't
+a nice-to-have on top of spaced repetition — it's the missing half of the
+mechanism the design already claims to implement.
+
+**Where it's still generation effect and retrieval practice, not just
+bookkeeping.** A `correct` observation in the proposed `evidence` table is
+only meaningful if it reflects the same standard already required
+elsewhere in this doc and in `tools.md`'s rules: production before
+confirmation (rule 2), and — for the strongest grade,
+`correct_with_application` — a novel-scenario transfer question actually
+cleared (rule 11), not just a definition recited back correctly. If the
+end-of-session grading pass graded on how fluent an explanation *sounded*
+rather than on whether recall and application were actually demonstrated
+during the conversation, it would reintroduce the exact illusion-of-
+competence failure mode named below, just moved from live conversation
+into a retrospective LLM judgment call. That's a new, specific instance
+of "does the agent actually test recall, not just discuss?" (see
+"Realistic goals"): does the grading pass actually require a demonstrated
+application before marking a concept `correct_with_application`, or does
+it default to crediting an agreeable-sounding transcript? This has to be
+checkable the same way the live-session version already is.
+
+**Why borrowing FSRS's semantics but not its fitted parameters is the
+evidence-respecting choice, not a shortcut.** Modern spaced-repetition
+schedulers (FSRS) fit per-user stability/difficulty parameters from
+review history — and need on the order of 10^3 graded reviews to do that
+reliably. Twenty minutes of Anki review generates on that order in a
+handful of sessions; twenty minutes of conversation generates roughly
+five graded observations. Copying FSRS's *fitting* approach at this data
+volume wouldn't be a smaller version of a validated method, it would be
+overfitting noise and calling it personalization. Using FSRS's
+*scheduling logic* (review when predicted recall decays to a target
+retention) with fixed, stated constants instead is the design that
+matches what the actual evidence base supports at this scale — the same
+reasoning `OVERDUE_TIE_BUCKET_SIZE` and `SHAKY_SETTLED_THRESHOLD` already
+use elsewhere in this project for the same reason.
+
+**Untested claim this doesn't resolve.** Whether an LLM's single
+end-of-session graded pass over a transcript produces stability/
+confidence estimates *comparable in quality* to Anki's turn-by-turn
+self-reported grades is not established by anything above — it's a
+structural argument for why the comparison is fair to attempt (better
+per-observation quality, far fewer observations), not evidence that the
+resulting schedule is actually well-calibrated. Same status as the rest
+of this project's central bet: a hypothesis to check against real use
+(`recommend_review`'s interval predictions actually holding up against
+when the learner turns out to still remember something), not a foregone
+conclusion.
+
 ## Honest limitations and open risks
 
 - **Is voice actually better, or just more appealing to build?** Anki plus
@@ -125,3 +191,11 @@ won't have early on. A more realistic bar:
   generate them.** Early success criteria should be behavioral (is it being
   used, is it testing recall) — not "did retention improve," which needs
   much more usage history than an MVP will have.
+- **If two-sided evidence memory (`decisions.md` #44) gets built:** the
+  same recall-vs-discuss check above applies to its end-of-session
+  grading pass specifically — sample a few graded transcripts and verify
+  a `correct_with_application` grade actually required a cleared rule-11
+  transfer question, not just a fluent-sounding explanation. A grader
+  that credits fluency would quietly reintroduce the illusion-of-
+  competence risk this doc already flags, just inside a scheduler instead
+  of a live conversation.

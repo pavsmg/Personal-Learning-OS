@@ -1958,13 +1958,17 @@ understanding, not competence (`pedagogy.md`, "Realistic goals").
 
 **Status:** Proposed (2026-08-15) — design only, nothing built, no code
 written. Deliberately staged behind three prerequisites: (a) #43's
-"no evidence" fix, which is small and independent; (b) enough real
-sessions for a two-sided store to have anything to hold — the binding
-constraint is data volume, not algorithm quality, and building a
-sophisticated scheduler over 10 observations optimizes the wrong end;
-(c) a new `pedagogy.md` section covering this Anki comparison, since
-CLAUDE.md gates any new learning mechanism on that doc rather than on
-the mechanism sounding reasonable. Open question not resolved here: what
+"no evidence" fix, which is small and independent — **done, 2026-08-16**;
+(b) enough real sessions for a two-sided store to have anything to hold —
+the binding constraint is data volume, not algorithm quality, and
+building a sophisticated scheduler over 10 observations optimizes the
+wrong end — **still open**; (c) a new `pedagogy.md` section covering this
+Anki comparison, since CLAUDE.md gates any new learning mechanism on that
+doc rather than on the mechanism sounding reasonable — **done,
+2026-08-16**, see `pedagogy.md`'s "Two-sided evidence memory" section.
+Only (b) remains: this stays Proposed, not Decided, until real session
+volume exists to build the `evidence` table against. Open question not
+resolved here: what
 to do with concepts that get discussed but never actually quizzed — they
 generate no observation of either sign, and treating discussion as
 evidence would reintroduce exactly the fluency-as-understanding error

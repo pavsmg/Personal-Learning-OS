@@ -99,9 +99,12 @@ Discussion-stage, none of these are scoped or decided yet (opened
   *right*, not only what goes wrong, graded once per session from the
   transcript; per-concept stability/difficulty on FSRS semantics with
   fixed constants rather than per-user fitting. Would also close the
-  voice-can't-save-mistakes gap (#22) as a side effect. #43 shipped
-  (2026-08-16); still staged behind real session volume and a
-  `pedagogy.md` section — the binding constraint is data, not algorithm.
+  voice-can't-save-mistakes gap (#22) as a side effect. Two of three
+  prerequisites now done (2026-08-16): #43 shipped, and `pedagogy.md`
+  gained a "Two-sided evidence memory" section covering the Anki
+  comparison and the specific risk of the end-of-session grading pass
+  crediting fluency instead of demonstrated recall. Only real session
+  volume remains — the binding constraint is data, not algorithm.
 
 - [x] ~~Phase 1: folder fallback~~ — done, `decisions.md` #49.
   `_infer_domain` now falls back to the vault's top-level folder name
