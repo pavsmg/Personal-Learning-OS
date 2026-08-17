@@ -2683,3 +2683,61 @@ frontmatter addition with zero other diff, to avoid entangling with the
 user's own concurrent note-writing in the same repo); ~40 notes where my
 `domain:` write landed in the same file as unrelated user content edits
 were deliberately left uncommitted for the user's own review.
+
+## 56. Rescope `linux` and `agents-llm` — split into `operating-systems`, `knowledge-representation`, `python`
+
+**Context:** `backlog.md` had an open item (surfaced in #53/#54) flagging
+that `linux` (81 notes) and `agents-llm` (36 notes) read broader than
+their names suggest — an artifact of #52's clustering, which seeded
+domains from whatever a cluster's centroid happened to group, not from a
+deliberate taxonomy. Queried live membership of both domains against the
+real vault and found each was actually two or three distinct groups glued
+together under one label:
+- `linux` (81): ~53 genuinely Linux-specific notes; ~20 general OS/
+  systems-programming fundamentals with nothing Linux-specific about them
+  (`process`, `fork`, `exec`, `kernel`, `daemon`, `CPU scheduler`,
+  `Inter-Process Communication`, `device`, `hardware`, `firmware`,
+  `computer program`, `software`, `storage device`, `symlink`,
+  `library (linux)`, `portability`, `multi-process architecture`,
+  `operating system`, `orphan process`, `kernel module`, `kernel panic`);
+  ~7 notes about entirely different OS families (`macOS`, `iOS`,
+  `Android`, `UNIX`, `Unix-like OS`, `Minix`, `GNU`).
+- `agents-llm` (36): ~26 genuine agents/LLM notes, including an 8-note
+  knowledge-representation sub-cluster (`Knowledge Graph`, `Ontology`,
+  `RDF`, `SPARQL`, `Symbolic AI`, `GraphRAG`,
+  `Knowledge Representation & Graphs`, `Property Graph`); ~10 generic
+  Python/data-science tooling notes (`NumPy`, `Pandas`, `Matplotlib`,
+  `Seaborn`, `ScikitLearn`, `PyTorch`, `Jupyter Notebook`, `Python`,
+  `Python Modules`, `Python Tooling & Libraries`) that belonged in the
+  already-existing `python` domain (5 notes, from #55), not `agents-llm`.
+
+User confirmed the direction (move notes into correctly-scoped domains,
+creating new ones where warranted) and, via two follow-up questions,
+resolved the two open sub-decisions explicitly rather than leaving them
+to my judgment: the ~7 other-OS-family notes fold into the new
+`operating-systems` domain rather than staying under `linux`; the 8-note
+knowledge-representation cluster gets its own new `knowledge-representation`
+domain rather than staying folded into `agents-llm`.
+
+**Decision:** Reclassified 46 notes total — 28 (`linux` →
+`operating-systems`, the 20 fundamentals + 7 other-OS-family notes), 8
+(`agents-llm` → `knowledge-representation`), 10 (`agents-llm` → `python`).
+This is a *reassignment* of an existing `domain:` value, not filling in a
+missing one, so it bypassed `apply_classifications` (which deliberately
+skips notes that already carry a domain, per #54/#55's write path) — used
+a small one-off script instead that asserted each target file had
+exactly one `domain:` line matching the expected old value before
+overwriting it, verified against a dry run before any write. No changes
+to `classification/service.py` or `apply_classifications` itself; this is
+data curation, same category as #52/#55's seeding, just a rename/move
+instead of a fill.
+
+**Status:** Decided (2026-08-16). `uv run pytest`: 197 passed, unchanged
+(no logic touched). Vault git diff confirmed programmatically: all 46
+files show exactly one line changed (`domain: <old>` → `domain: <new>`),
+zero other diff — committed as a single vault commit. Domain counts after
+this entry: `linux` 81 → 53, `agents-llm` 36 → 18, `operating-systems`
+(new) 28, `knowledge-representation` (new) 8, `python` 5 → 15. Total
+notes carrying a domain unchanged at 1116/1560 (71.5%) — this entry only
+moves existing labels, doesn't add new ones. Closes the `backlog.md`
+"Revisit `agents-llm` and `linux`'s scope" open item.

@@ -203,12 +203,14 @@ Discussion-stage, none of these are scoped or decided yet (opened
   and a couple other small generic clusters, same reasoning as #51's
   exclusions. 42 applied total. Vault total: **1116 of 1560 (71.5%)**, up
   from 1074 (68.8%).
-- [ ] **Revisit `agents-llm` and `linux`'s scope** — surfaced in #53
-  (macOS/Android → linux) and #54 (Python-tooling notes → agents-llm):
-  both domains, seeded during #52's clustering, read broader in practice
-  than their names suggest ("linux" closer to "Unix/OS fundamentals",
-  "agents-llm" pulling in general Python). Not fixed — a naming/rescoping
-  call for whoever revisits domain taxonomy next, not a classifier bug.
+- [x] ~~Revisit `agents-llm` and `linux`'s scope~~ — done (decisions.md
+  #56). Split `linux` (81) into `linux` (53) + new `operating-systems`
+  (28: general OS/systems-programming fundamentals + other-OS-family
+  notes); split `agents-llm` (36) into `agents-llm` (18) + new
+  `knowledge-representation` (8: KG/ontology cluster) + existing `python`
+  (+10 tooling notes, 5 → 15). 46 notes reassigned, existing `domain:`
+  values overwritten (not a fill-in — bypassed `apply_classifications`'
+  skip-if-labeled behavior via a one-off verified script).
 - [ ] **Multiple domains per note** — surfaced in #52, not scoped.
   `domain:` as a vault frontmatter list is a small, additive parsing
   change; the real cost is everywhere `domain` is assumed to be a single
@@ -218,6 +220,17 @@ Discussion-stage, none of these are scoped or decided yet (opened
   answered by the frontmatter change alone. Worth a real `decisions.md`
   entry of its own if/when a note genuinely needs it, not bundled into
   domain-inference work.
+- [ ] **Taxonomy-aware classification** — surfaced by #56's rescoping.
+  `build_class_centroids`/`classify_unlabeled_notes` treat every domain as
+  a flat, independent class; #56 showed that's not why `linux` and
+  `agents-llm` drifted broad — the embeddings scored fine, the *label*
+  covered two or three genuinely different topics. Two directions worth
+  trying once there's a second real case like this: (a) prepend a short
+  domain description to the embedded text so classification sees intent,
+  not just a bare name; (b) hierarchical classification — broad category
+  first, then subdomain — which needs a real taxonomy structure defined
+  first, not just flat domain names. Not scoped, no evidence yet beyond
+  the one case.
 - [x] ~~Phase 4: deprioritize `"general"` in `recommend_domain()`~~ —
   done, `decisions.md` #50, picked up ahead of phase 2 by explicit user
   choice (cheapest of the four, and the only one with real effect on

@@ -150,6 +150,30 @@ Left the non-mine ~82 for the user's own review/commit rather than
 bundling it — if a future session is asked to commit "the vault," don't
 assume everything uncommitted there is this project's doing.
 
+**Same 2026-08-16 session, continued again — #56, rescoping `linux` and
+`agents-llm`.** Closed the `backlog.md` open item from #53/#54: queried
+live domain membership and confirmed both domains were each two or three
+distinct topics glued together by #52's clustering, not one coherent
+subject. Two follow-up questions to the user resolved the scope calls
+that weren't obvious from the data alone (fold the ~7 other-OS-family
+notes into the new domain rather than leave them under `linux`; split the
+8-note knowledge-representation cluster into its own new domain rather
+than leave it under `agents-llm`). Result: `linux` 81 → 53 (−28 to new
+`operating-systems`), `agents-llm` 36 → 18 (−8 to new
+`knowledge-representation`, −10 into existing `python`, 5 → 15). This was
+a *reassignment* of already-set `domain:` values, not a fill-in, so it
+bypassed `apply_classifications` (which skips already-labeled notes) via
+a small one-off script that asserted the expected old value before
+overwriting each of the 46 files — verified with a dry run first, then a
+post-write `git diff --numstat` confirming exactly one line changed per
+file, zero other diff. `uv run pytest`: 197 passed, no code changes (pure
+data curation, same as #54/#55). Total notes-with-a-domain unchanged at
+1116/1560 (71.5%) — this only moved existing labels. New backlog item
+opened (not started): taxonomy-aware classification, prompted by this
+rescoping — the embeddings weren't wrong, the flat per-domain-name
+classing was. Vault repo: committed as a single clean commit (46 files);
+project repo: `decisions.md` #56 + `backlog.md` updated in this pass.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s
