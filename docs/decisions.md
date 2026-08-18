@@ -2842,3 +2842,106 @@ this entry: `linux` 81 → 53, `agents-llm` 36 → 18, `operating-systems`
 notes carrying a domain unchanged at 1116/1560 (71.5%) — this entry only
 moves existing labels, doesn't add new ones. Closes the `backlog.md`
 "Revisit `agents-llm` and `linux`'s scope" open item.
+
+---
+
+## 57. Preferring tracked concepts over blind graph traversal, for every domain — not just languages
+
+**Context:** `backlog.md`'s "Extend the 'prefer tracked data over blind
+graph traversal' fix beyond language domains" item. #31 fixed a real,
+concrete pedagogy bug — an automatic-mode session opened by asking "how
+many letters does Turkish have," because `create_session`'s
+anchor+`related_notes` heuristic can't tell a reference/index note
+(`Turkish alphabet.md`, a letter chart) from an actual practicable
+concept, and happily pulled it into the concept list as a graph neighbor.
+#31's fix was language-scoped only: `_language_concepts` now sources a
+language session's concepts from `get_curriculum(language)` — real,
+structured, already-being-practiced data — instead of vault traversal,
+whenever curriculum data exists.
+
+Every non-language domain (chemistry, physics, classical-ml, ...) still
+has no equivalent. In `create_session`'s non-language branch:
+
+```python
+concepts = [anchor_title]
+for note in related_notes(anchor_title):
+    if len(concepts) >= max_concepts:
+        break
+    concepts.append(note.title)
+```
+
+`related_notes(anchor_title)` returns every 1-hop graph neighbor with no
+notion of "is this something worth being quizzed on," exactly the defect
+#31 fixed for languages. A chemistry session could just as easily pull in
+`CHEMISTRY ROADMAP` (an index note) as a concept, the same shape of bug,
+just never actually observed yet because no one filed a complaint like
+the Turkish one for a non-language domain. Post-#44, `mistakes.db`/
+`evidence` now hold real per-domain, per-concept tracked history for
+every domain, not just languages — the data #31 lacked for this case now
+exists.
+
+**Why this isn't just "call `_language_concepts`'s pattern for every
+domain."** `_language_concepts` *replaces* the anchor-derived concept list
+outright, discarding `anchor_title` itself whenever curriculum data
+exists — correct for languages, where Language-Lab's curriculum is more
+authoritative than the vault heuristic even for a note the search
+explicitly matched. It is not correct here: a chemistry or physics vault
+note *is* the real content, not an index page standing in for the
+subject, and a learner-directed session naming a specific topic (e.g.
+`create_session("gradient descent")`) should still get `Gradient descent`
+as a concept — silently substituting whatever else is tracked in
+`classical-ml` instead would ignore what was actually asked for, a
+regression `_language_concepts` doesn't risk (Language-Lab curricula
+don't have single-note "topics" to override in the same sense).
+
+**Decision:** keep `anchor_title` as `concepts[0]` unconditionally, in
+both automatic and learner-directed mode — never overridden. Only reorder
+how the *remaining* `max_concepts - 1` slots get filled from
+`related_notes(anchor_title)`: a neighbor with real tracked evidence in
+this domain (present in `get_learning_profile(domain)`) is preferred over
+one with none, before falling back to `related_notes`' own existing order
+to fill whatever's left. No candidate is dropped — this reorders, it
+doesn't filter — so a domain with little tracked history still gets a
+full concept list exactly as today, just increasingly favoring confirmed-
+practicable concepts as more real evidence accumulates. New helper in
+`sessions/service.py`:
+
+```python
+def _prefer_tracked_concepts(candidates: list[Note], domain: str) -> list[Note]:
+    tracked = {estimate.concept.lower() for estimate in get_learning_profile(domain=domain)}
+    preferred = [note for note in candidates if note.title.lower() in tracked]
+    rest = [note for note in candidates if note.title.lower() not in tracked]
+    return preferred + rest
+```
+
+applied as `_prefer_tracked_concepts(related_notes(anchor_title), domain)`
+in place of the raw `related_notes(anchor_title)` call above. Placed in
+the single shared `else` branch (not gated on `domain not in LANGUAGES`),
+so a language with no curriculum data yet — which already falls through
+to this same vault-traversal branch — benefits too, for free.
+
+**Explicit non-goals**, named so they don't get silently assumed later:
+this does not touch anchor selection (`search_notes`, automatic mode's
+`recommend_review_scored`/`_prioritize_by_importance` pick) at all, and it
+does not attempt to distinguish "reference note" from "practicable
+concept" structurally (e.g. via note length, a frontmatter flag, or
+category) — it only leans on whether a concept has ever actually been
+quizzed, which is silent on a domain's first-ever session in it (nothing
+tracked yet, so `_prefer_tracked_concepts` is a no-op and today's
+existing blind-traversal risk is unchanged for a genuinely cold domain).
+That residual gap is the same "no evidence yet" honesty this project
+already accepts elsewhere (`decisions.md` #45) rather than a new problem
+to solve here.
+
+**Status:** Decided and built (2026-08-18). `_prefer_tracked_concepts`
+added to `sessions/service.py`, wired into `create_session`'s shared
+vault-traversal branch in place of the raw `related_notes(anchor_title)`
+call, exactly as scoped — no changes to anchor selection.
+
+`uv run pytest`: 238 passed (232 before — 6 new: reordering without
+dropping candidates, case-insensitive match, a no-op when nothing in the
+domain is tracked yet — all three direct unit tests on
+`_prefer_tracked_concepts`; plus `create_session`-level tests confirming
+a tracked related note is preferred over an untracked one, the anchor is
+never overridden even when untracked itself, and an untracked domain
+preserves today's existing order unchanged).

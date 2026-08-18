@@ -5,6 +5,7 @@ import pytest
 from learning_os.llm_client import LLMReply, ToolCallRequest
 from learning_os.sessions.service import (
     _find_blind_spot_topic,
+    _prefer_tracked_concepts,
     _prioritize_by_importance,
     create_session,
     finish_session,
@@ -38,6 +39,129 @@ def grading_reply(grades: list[dict]) -> LLMReply:
         content=None,
         tool_calls=[ToolCallRequest(id="call_1", name="record_session_grades", arguments={"grades": grades})],
     )
+
+
+def test_prefer_tracked_concepts_reorders_without_dropping_candidates(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+    from learning_os.retrieval.models import NoteSummary
+
+    save_mistake(
+        concept="Zulu", explanation="x", category="conceptual", severity="minor", confidence=0.5, domain="chemistry"
+    )
+    candidates = [
+        NoteSummary(title="Alpha", snippet="", tags=[]),
+        NoteSummary(title="Zulu", snippet="", tags=[]),
+        NoteSummary(title="Beta", snippet="", tags=[]),
+    ]
+
+    result = _prefer_tracked_concepts(candidates, "chemistry")
+
+    assert [note.title for note in result] == ["Zulu", "Alpha", "Beta"]
+
+
+def test_prefer_tracked_concepts_case_insensitive_match(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+    from learning_os.retrieval.models import NoteSummary
+
+    save_mistake(
+        concept="zulu", explanation="x", category="conceptual", severity="minor", confidence=0.5, domain="chemistry"
+    )
+    candidates = [NoteSummary(title="Alpha", snippet="", tags=[]), NoteSummary(title="Zulu", snippet="", tags=[])]
+
+    result = _prefer_tracked_concepts(candidates, "chemistry")
+
+    assert [note.title for note in result] == ["Zulu", "Alpha"]
+
+
+def test_prefer_tracked_concepts_no_tracked_data_is_a_no_op(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.retrieval.models import NoteSummary
+
+    candidates = [NoteSummary(title="Alpha", snippet="", tags=[]), NoteSummary(title="Zulu", snippet="", tags=[])]
+
+    assert _prefer_tracked_concepts(candidates, "chemistry") == candidates
+
+
+def test_create_session_prefers_tracked_concept_over_untracked_graph_neighbor(tmp_path, monkeypatch):
+    """decisions.md #57: among related_notes candidates with no genuine
+    urgency gap, one with real tracked evidence in the domain should be
+    preferred over an untracked graph neighbor -- the non-language
+    counterpart to #31's Turkish-alphabet fix. Without the fix, both
+    "Alpha" and "Zulu" tie on importance (nothing links to either) and
+    fall back to alphabetical order (Alpha, then Zulu)."""
+    write_vault(
+        tmp_path,
+        {
+            "Hub.md": "---\ndomain: chemistry\n---\ncentral concept, linked to [[Alpha]] and [[Zulu]].",
+            "Alpha.md": "an untracked related note.",
+            "Zulu.md": "a related note with real tracked history.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+
+    save_mistake(
+        concept="Zulu",
+        explanation="x",
+        category="conceptual",
+        severity="minor",
+        confidence=0.5,
+        domain="chemistry",
+    )
+
+    plan = create_session("Hub", max_concepts=3)
+
+    assert plan.concepts == ["Hub", "Zulu", "Alpha"]
+
+
+def test_create_session_never_overrides_the_explicitly_requested_anchor(tmp_path, monkeypatch):
+    """The anchor is never replaced by tracked-concept preference, even
+    when it has no tracked history itself and a related note does --
+    unlike _language_concepts, an explicitly-named topic must still show
+    up as a concept."""
+    write_vault(
+        tmp_path,
+        {
+            "Hub.md": "---\ndomain: chemistry\n---\ncentral concept, linked to [[Zulu]].",
+            "Zulu.md": "a related note with real tracked history.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    from learning_os.mistakes.service import save_mistake
+
+    save_mistake(
+        concept="Zulu", explanation="x", category="conceptual", severity="minor", confidence=0.5, domain="chemistry"
+    )
+
+    plan = create_session("Hub", max_concepts=2)
+
+    assert plan.concepts[0] == "Hub"
+
+
+def test_create_session_untracked_domain_keeps_original_related_notes_order(tmp_path, monkeypatch):
+    """A no-op when nothing in the domain is tracked yet -- absence isn't
+    evidence, same honesty as estimate_mastery (#45), not a new problem."""
+    write_vault(
+        tmp_path,
+        {
+            "Hub.md": "---\ndomain: chemistry\n---\ncentral concept, linked to [[Alpha]] and [[Zulu]].",
+            "Alpha.md": "an untracked related note.",
+            "Zulu.md": "another untracked related note.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+    plan = create_session("Hub", max_concepts=3)
+
+    assert plan.concepts == ["Hub", "Alpha", "Zulu"]
 
 
 def test_create_session_anchors_on_best_search_match(tmp_path, monkeypatch):

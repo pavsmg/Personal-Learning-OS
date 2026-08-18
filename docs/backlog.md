@@ -69,18 +69,20 @@ rule:
   and say nothing — the tutor should greet and ask its first question
   unprompted; then press Enter and confirm a spoken recap arrives before
   the summary line.
+- **Two-sided evidence grading over a real voice session** — `decisions.md`
+  #44. The grading pass reads `logs/<session_id>.log`, the format voice
+  already writes, so it's structurally able to grade a voice session the
+  same as a text one (closing #22) — but that's untested against a real
+  voice conversation, only against real text sessions and offline fakes.
+  Check: run a real `learning-os-voice` session, let it end, and confirm
+  `evidence` rows and `GRADE:` log lines appear for it exactly like a text
+  session's.
 
 ## Improvement ideas — session planner
 
 Discussion-stage, none of these are scoped or decided yet (opened
 2026-08-12):
 
-- [ ] **Extend the "prefer tracked data over blind graph traversal" fix
-  beyond language domains.** The Turkish-alphabet-style bug (a reference
-  note picked as a quiz target, `decisions.md` #31) can happen in any
-  domain — there's no Language-Lab equivalent for e.g. chemistry, but
-  `mistakes.db` already has real per-domain mistake data a non-language
-  planner path could lean on instead of pure `related_notes` traversal.
 - [x] ~~Feed real mastery data into difficulty/duration~~ — done,
   `decisions.md` #43. Evidence classes (`untracked`/`shaky`/`settled`,
   split at 0.5 on `conceptual_understanding`) replace the averaged scalar;

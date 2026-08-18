@@ -237,6 +237,20 @@ Not done, worth naming: voice-session grading is structurally wired
 exercised against a real voice session yet — the #22 close is
 structural, not yet independently verified live.
 
+**2026-08-18 session — #57 built, prefer tracked concepts over blind
+graph traversal for every domain.** Closed the last open item off
+`backlog.md`'s session-planner list: #31 fixed the Turkish-alphabet bug
+(a reference note picked as a quiz target) for language domains only, by
+sourcing concepts from Language-Lab curriculum instead of vault graph
+traversal. Every other domain still had no equivalent. New
+`_prefer_tracked_concepts` reorders `related_notes`-filled concept slots
+to favor notes with real tracked evidence (post-#44, every domain now has
+some) over untracked graph neighbors — without ever overriding the anchor
+or an explicitly-named topic, unlike #31's full-replacement approach,
+which isn't safe outside languages. `uv run pytest`: 238 passed (232
+before, 6 new). `backlog.md`'s "Extend the 'prefer tracked data...' fix"
+item is now fully closed — nothing left in that list.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s

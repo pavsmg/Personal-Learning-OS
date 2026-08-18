@@ -8,7 +8,7 @@ from learning_os.language import LANGUAGES, get_curriculum
 from learning_os.llm_client import chat_completion
 from learning_os.mistakes import get_learning_profile, record_evidence, recommend_domain, recommend_review_scored
 from learning_os.retrieval import concept_importance, get_note, most_important_notes, related_notes, search_notes
-from learning_os.retrieval.models import Note
+from learning_os.retrieval.models import Note, NoteSummary
 from learning_os.session_log import LOG_DIR, SessionLog
 from learning_os.sessions.grading import ChatFn, grade_session
 from learning_os.sessions.models import SessionPlan, SessionSummary
@@ -178,6 +178,23 @@ def _find_blind_spot_topic() -> str | None:
     return None
 
 
+def _prefer_tracked_concepts(candidates: list[NoteSummary], domain: str) -> list[NoteSummary]:
+    """decisions.md #57: the non-language counterpart to #31's fix for the
+    Turkish-alphabet bug (a reference/index note picked as a quiz target
+    via blind related_notes traversal). Unlike _language_concepts, this
+    never replaces or drops a candidate -- it only reorders: a note with
+    real tracked evidence in this domain (already confirmed practicable,
+    not just graph-adjacent) is preferred over one with none, before
+    falling back to related_notes' own existing order to fill whatever's
+    left. A domain with no tracked history yet is a no-op -- same
+    "absence isn't evidence" honesty as estimate_mastery (#45), not a new
+    problem introduced here."""
+    tracked = {estimate.concept.lower() for estimate in get_learning_profile(domain=domain)}
+    preferred = [note for note in candidates if note.title.lower() in tracked]
+    rest = [note for note in candidates if note.title.lower() not in tracked]
+    return preferred + rest
+
+
 def _overdue_bucket(ratio: float) -> int:
     return round(ratio / OVERDUE_TIE_BUCKET_SIZE)
 
@@ -198,7 +215,11 @@ def _prioritize_by_importance(ranked: list[tuple[str, float]]) -> list[str]:
 
 def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPlan:
     """Naive v1 heuristic: anchor on the best search match, expand via
-    related_notes. target_difficulty/expected_duration_minutes derive from
+    related_notes -- but non-anchor slots prefer already-tracked concepts
+    over arbitrary graph neighbors (`_prefer_tracked_concepts`,
+    decisions.md #57), so a reference/index note is never favored over a
+    real, previously-quizzed one just for being graph-adjacent.
+    target_difficulty/expected_duration_minutes derive from
     each planned concept's real tracked evidence via _evidence_classes
     (decisions.md #43) -- untracked concepts fall back to today's honest
     default rather than a guess.
@@ -257,7 +278,7 @@ def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPl
         )
     else:
         concepts = [anchor_title]
-        for note in related_notes(anchor_title):
+        for note in _prefer_tracked_concepts(related_notes(anchor_title), domain):
             if len(concepts) >= max_concepts:
                 break
             concepts.append(note.title)
