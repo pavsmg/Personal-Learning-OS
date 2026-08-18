@@ -124,7 +124,7 @@ def end_session(state: ConversationState, chat_fn: ChatFn = chat_completion) -> 
         state.messages, chat_fn, debug=state.debug, call_counter=state.call_counter, log=state.log
     )
     record_turn(state.session_id, "assistant", closing)
-    finish_session(state.session_id)
+    finish_session(state.session_id, _chat_fn=chat_fn)
     summary = summarize_session(state.session_id)
 
     if state.log is not None:

@@ -1956,23 +1956,97 @@ ahead. The defensible split is: Anki for atomic facts, this system for
 explanation and transfer. Every signal here remains scoped to conceptual
 understanding, not competence (`pedagogy.md`, "Realistic goals").
 
-**Status:** Proposed (2026-08-15) — design only, nothing built, no code
-written. Deliberately staged behind three prerequisites: (a) #43's
-"no evidence" fix, which is small and independent — **done, 2026-08-16**;
-(b) enough real sessions for a two-sided store to have anything to hold —
-the binding constraint is data volume, not algorithm quality, and
-building a sophisticated scheduler over 10 observations optimizes the
-wrong end — **still open**; (c) a new `pedagogy.md` section covering this
-Anki comparison, since CLAUDE.md gates any new learning mechanism on that
-doc rather than on the mechanism sounding reasonable — **done,
-2026-08-16**, see `pedagogy.md`'s "Two-sided evidence memory" section.
-Only (b) remains: this stays Proposed, not Decided, until real session
-volume exists to build the `evidence` table against. Open question not
-resolved here: what
-to do with concepts that get discussed but never actually quizzed — they
-generate no observation of either sign, and treating discussion as
-evidence would reintroduce exactly the fluency-as-understanding error
-`pedagogy.md` warns about.
+**Status:** Decided and built (2026-08-17). Prerequisite (b) — "enough
+real sessions for a two-sided store to have anything to hold" — was
+**deliberately overridden**, not naturally satisfied: at the time of
+building, the live store still held only 20 rows across 5 domains, not
+meaningfully more than the 10 that originally motivated staging this
+behind (b). The override is sound because (b)'s actual concern was
+data-hungry *parameter fitting*, and this design was already written to
+never fit per-user parameters (point 3) — the objection never applied to
+the schema/capture mechanism itself, only to a fitted scheduler this
+design doesn't build. The concrete trigger: reviewing a real physics
+session found the model had called `save_mistake` on 3 of 8 turns it had
+explicitly graded correct, permanently degrading those concepts'
+understanding scores under the one-sided store — waiting only let more
+bad data accumulate in a schema already known to be wrong.
+
+**What was built, against the proposed decision's six points:**
+
+1. **Two-sided `evidence` table**, additive — `mistakes` untouched,
+   `EVIDENCE_SCHEMA` in `mistakes/store.py`, `Evidence`/`EvidenceOutcome`
+   in `mistakes/models.py`. A second flat export
+   (`data/evidence_export.json`), kept separate from the mistakes export
+   so its lossless-round-trip test stays untouched by an unrelated
+   schema.
+2. **End-of-session graded capture**, not per-turn — `sessions/grading.py`'s
+   `grade_session`, called from `finish_session` (idempotent; wrapped in a
+   swallow-to-stderr matching `archive.after_write`'s precedent). Reads
+   `logs/<session_id>.log` as the transcript source, which is what makes
+   voice gradeable too (closing #22 as a side effect, confirmed
+   structurally — not yet exercised against a real voice session). Every
+   `ConceptGrade`'s `rationale` (required on the model) is written to the
+   session log, sampleable after the fact.
+3. **Anki-shaped stability/difficulty**, fixed constants, no per-user
+   fitting — `mistakes/service.py`'s `_fold_stability_difficulty`.
+   `FSRS_FACTOR = 19/81`, `FSRS_DECAY = -0.5` verified against current
+   FSRS documentation before use (`awesome-fsrs` wiki), not from memory,
+   per this entry's own original requirement.
+4. **`_overdue_ratio` kept its exact shape** — only the interval source
+   changed. `MAX_REVIEW_INTERVAL_DAYS` raised 14 → 30 (user-confirmed,
+   independent of two-sidedness itself): two-sided evidence can now
+   honestly justify a longer gap for a demonstrably solid concept.
+5. **Absence stays absence** — `not_reached` evidence is written (so a
+   planned-but-never-quizzed concept isn't silently dropped) but never
+   enters scoring; this entry's own open question (below) is resolved by
+   that rule.
+6. **`corrected` finally means something** — `record_evidence` flips it
+   on a later `correct`/`correct_with_application` observation.
+
+**The open question this entry left unresolved — concepts discussed but
+never quizzed — is resolved as: `not_reached`, written but excluded from
+every scoring path** (`get_learning_profile`, `estimate_mastery`,
+`recommend_review_scored`), extending point 5 consistently rather than
+treating discussion as evidence.
+
+**A real, deliberate side effect not in the original proposal:**
+`_conceptual_understanding` became a *weighted* average (by confidence for
+a mistake, `quality` for evidence), not a plain one — even for
+mistakes-only concepts, a low-confidence mistake now moves the score less
+than a high-confidence one. Existing pinned test values changed to match
+(`test_mistakes_service.py`).
+
+**Verified against real data.** `uv run learning-os-backfill-evidence`
+(new CLI, `sessions/backfill.py`) regraded all 5 real historical session
+logs. The physics session's exact bug is closed, not just theoretically
+fixed: Quantum Mechanics and Electromagnetism graded
+`correct_with_application`, and their `mistakes` rows' `corrected` flag
+flipped to `True` for real, confirmed via direct query. Sampled that
+grade's rationale in `logs/4b599ed9-....log`: it cites the actual rule-11
+transfer exchange (the follow-up scenario question and the learner's
+specific answer to it), not a fluent-sounding definition — the concrete
+check `pedagogy.md`'s "Realistic goals" section calls for once this gets
+built, now actually performed rather than deferred (`pedagogy.md` updated
+to reflect this). `estimate_mastery`/`get_learning_profile` spot-checked
+against the live `mistakes.db` post-backfill: Quantum Mechanics (1
+mistake + 1 `correct_with_application`) scores 0.55, notably higher than
+concepts with only `partial` evidence on top of two mistakes (0.23–0.24)
+— the expected direction.
+
+`uv run pytest`: 232 passed (203 before this entry — 29 new: evidence
+store round-trip/export tests, two-sided scoring tests, the grading
+module's unit tests, `finish_session`'s idempotency/failure-swallowing/
+undiscussed-concept tests, and the backfill script's tests).
+
+**A real bug found and fixed during this build, worth naming:** the first
+version of `end_session` (`conversation/loop.py`) didn't forward its
+`chat_fn` into `finish_session`'s new grading call, so grading always fell
+back to the real `chat_completion` default — caught because an unmocked
+test made real API calls and wrote fabricated evidence into the live
+`mistakes.db` before this was noticed and fixed. `end_session` now forwards
+`chat_fn` through; `ScriptedChat` test fakes across the conversation-loop
+suite now accept `tool_choice` to match the real signature they stand in
+for.
 
 ---
 

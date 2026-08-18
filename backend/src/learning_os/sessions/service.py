@@ -1,12 +1,16 @@
 import re
+import sys
 import uuid
 from dataclasses import dataclass, field
 
 from learning_os.config import get_settings
 from learning_os.language import LANGUAGES, get_curriculum
-from learning_os.mistakes import get_learning_profile, recommend_domain, recommend_review_scored
+from learning_os.llm_client import chat_completion
+from learning_os.mistakes import get_learning_profile, record_evidence, recommend_domain, recommend_review_scored
 from learning_os.retrieval import concept_importance, get_note, most_important_notes, related_notes, search_notes
 from learning_os.retrieval.models import Note
+from learning_os.session_log import LOG_DIR, SessionLog
+from learning_os.sessions.grading import ChatFn, grade_session
 from learning_os.sessions.models import SessionPlan, SessionSummary
 
 DEFAULT_TARGET_DIFFICULTY = "foundational"
@@ -284,10 +288,50 @@ def record_turn(session_id: str, role: str, content: str) -> None:
     _SESSIONS[session_id].turns.append((role, content))
 
 
-def finish_session(session_id: str) -> None:
+def _session_transcript(session_id: str, record: _SessionRecord) -> str:
+    """Prefers the real on-disk logs/<session_id>.log (session_log.py) --
+    the shared voice/text format decisions.md #44 is built to read, which
+    is what makes voice gradeable too (closing #22 as a side effect).
+    Falls back to reconstructing from in-memory turns so finish_session
+    stays usable without a real log file, e.g. direct unit tests that
+    never go through conversation/loop.py's SessionLog."""
+    log_path = LOG_DIR / f"{session_id}.log"
+    if log_path.exists():
+        return log_path.read_text(encoding="utf-8")
+    return "\n".join(f"{role.upper()}: {content}" for role, content in record.turns)
+
+
+def finish_session(session_id: str, _chat_fn: ChatFn = chat_completion) -> None:
+    """Sets finished unconditionally first (unchanged contract), then runs
+    decisions.md #44's end-of-session grading pass exactly once per
+    session -- the idempotency guard skips grading (no duplicate evidence
+    rows or corrected flips) on a second call. Grading is wrapped in a
+    swallow-to-stderr, mirroring archive.after_write's precedent: it's
+    best-effort enrichment and must not crash session teardown for either
+    loop, and stays synchronous (confirmed acceptable for v1 -- matches
+    this project's existing LLM-call style, e.g. the career module)."""
     if session_id not in _SESSIONS:
         raise KeyError(f"Unknown session: {session_id}")
-    _SESSIONS[session_id].finished = True
+    record = _SESSIONS[session_id]
+    if record.finished:
+        return
+    record.finished = True
+
+    log: SessionLog | None = None
+    try:
+        transcript = _session_transcript(session_id, record)
+        log = SessionLog(session_id)
+        evidence = grade_session(
+            session_id, record.plan.domain, record.plan.concepts, transcript, log=log, _chat_fn=_chat_fn
+        )
+        record_evidence(evidence)
+    except Exception as exc:  # noqa: BLE001 -- grading is best-effort, must not crash session teardown
+        print(f"[grading] session grading failed: {exc}", file=sys.stderr)
+        if log is not None:
+            log.write(f"GRADING FAILED: {exc}")
+    finally:
+        if log is not None:
+            log.close()
 
 
 def summarize_session(session_id: str) -> SessionSummary:

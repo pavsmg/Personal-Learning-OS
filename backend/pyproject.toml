@@ -24,6 +24,7 @@ learning-os-language-import = "learning_os.language.cli:run"
 learning-os-mcp = "learning_os.mcp_server.server:run"
 learning-os-backup = "learning_os.mistakes.cli:run"
 learning-os-classify-domains = "learning_os.classification.cli:run"
+learning-os-backfill-evidence = "learning_os.sessions.backfill:run"
 
 [build-system]
 requires = ["uv_build>=0.11.29,<0.12.0"]

@@ -28,9 +28,9 @@ register(
 )
 register(
     "estimate_mastery",
-    "Estimate conceptual understanding of a single concept within a domain, from recorded "
-    "mistakes only. Returns null when nothing has ever been recorded for it: that means no "
-    "evidence either way, not that the concept is understood.",
+    "Estimate conceptual understanding of a single concept within a domain, from both recorded "
+    "mistakes and end-of-session graded evidence. Returns null when nothing has ever been "
+    "recorded for it: that means no evidence either way, not that the concept is understood.",
     estimate_mastery,
 )
 register(

@@ -48,16 +48,17 @@ The mechanisms with real evidence behind them, relevant to this project:
   should help, if the retrieval and planning layers actually mix domains
   rather than defaulting to single-topic sessions.
 
-## Two-sided evidence memory (proposed, `decisions.md` #44 — not built)
+## Two-sided evidence memory (`decisions.md` #44 — built)
 
-Today `mistakes.db` only records failure: a wrong answer writes a row,
-nothing is written for a right one, and `MistakeEntry.corrected` never
-flips to `True`. `#43` had to invent an explicit `untracked` state instead
-of a score precisely because one number can't carry both "how much
+Before `#44`, `mistakes.db` only recorded failure: a wrong answer wrote a
+row, nothing was written for a right one, and `MistakeEntry.corrected`
+never flipped to `True`. `#43` had to invent an explicit `untracked` state
+instead of a score precisely because one number can't carry both "how much
 evidence exists" and "what that evidence says" when evidence only ever
-points one direction. `#44` proposes fixing that at the source — record
-successes too — and this section is the evidence-and-limitations check
-`CLAUDE.md` requires before anything in that direction gets built.
+points one direction. `#44` fixes that at the source — recording successes
+too, via a two-sided `evidence` table — and this section is the
+evidence-and-limitations check `CLAUDE.md` requires before that kind of
+mechanism gets built, written before the code was.
 
 **Why one-sided evidence is a real gap, not just an asymmetry.** Spaced
 repetition's actual mechanism — the one cited above — depends on
@@ -191,11 +192,15 @@ won't have early on. A more realistic bar:
   generate them.** Early success criteria should be behavioral (is it being
   used, is it testing recall) — not "did retention improve," which needs
   much more usage history than an MVP will have.
-- **If two-sided evidence memory (`decisions.md` #44) gets built:** the
-  same recall-vs-discuss check above applies to its end-of-session
-  grading pass specifically — sample a few graded transcripts and verify
-  a `correct_with_application` grade actually required a cleared rule-11
-  transfer question, not just a fluent-sounding explanation. A grader
-  that credits fluency would quietly reintroduce the illusion-of-
-  competence risk this doc already flags, just inside a scheduler instead
-  of a live conversation.
+- **Two-sided evidence memory's grading pass (`decisions.md` #44) is
+  built — the same recall-vs-discuss check applies to it, and was
+  actually run, not just planned.** Regrading the 5 real historical
+  session logs (`learning-os-backfill-evidence`) produced a
+  `correct_with_application` grade for the physics session's Quantum
+  Mechanics and Electromagnetism concepts; sampling that grade's
+  rationale in the session log confirmed it cited the real rule-11
+  transfer exchange (the follow-up scenario question and the learner's
+  answer to it), not a fluent-sounding definition. A grader that credits
+  fluency would quietly reintroduce the illusion-of-competence risk this
+  doc already flags, just inside a scheduler instead of a live
+  conversation — this is the concrete check that it didn't.

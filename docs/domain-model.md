@@ -28,6 +28,38 @@ Fields:
 Enough structure that a future session can query it precisely rather than
 skim a free-text log.
 
+## Evidence (decisions.md #44)
+
+The two-sided counterpart to a mistake entry: a mistake row is written
+when something goes wrong, an evidence row is written for the graded
+outcome of every planned concept at the end of a session — success
+included, not just failure. Written once per session by an LLM-judged
+pass over that session's transcript (`sessions/grading.py`), not per
+turn — the same tool-calling burden rule 3 already fights for isn't
+doubled by also asking for a per-turn "success" call.
+
+Fields:
+
+- domain
+- concept
+- timestamp
+- outcome — one of `not_reached` / `incorrect` / `partial` / `correct` /
+  `correct_with_application` (the last requires a rule-11 novel-scenario
+  transfer question actually cleared, not just a correct definition)
+- quality — how strongly the transcript evidence supports this specific
+  grade (0–1), distinct from `outcome`'s discrete performance level
+- source — which pass produced this row (`"session_grading"` today)
+- session_id
+
+`not_reached` is a real, written outcome for a planned concept the
+session never actually quizzed — recorded so it isn't silently dropped,
+but never scored: mere discussion isn't evidence of understanding, only
+an actual recall/production check is (`pedagogy.md`'s illusion-of-
+competence concern, extended to this table). Existing `mistakes` rows are
+read alongside `evidence` rows as negative evidence, not migrated into
+this table — both stay the source of truth for conceptual understanding
+together.
+
 ## Learner profile / mastery
 
 On a request like "quiz me on algorithms," the assistant retrieves the
@@ -51,12 +83,15 @@ execute a skill, use a language spontaneously). See `pedagogy.md`'s
 "Realistic goals" for why conversational testing can support the former
 reliably but not the latter.
 
-The currently-implemented `MasteryEstimate` (`tools_interface/models.py`) is
-a single `mastery: float` per (domain, concept) — it doesn't yet distinguish
-conceptual from applied competence, and should be revisited before
-`estimate_mastery` (Milestone 6) is actually implemented against it, rather
-than building real planner logic around a schema that already overclaims
-what it measures.
+The currently-implemented `MasteryEstimate` (`mistakes/models.py`) is
+`conceptual_understanding: float`, `mistake_count: int` (mistakes-table
+rows only, its original meaning), and `observation_count: int` (the
+two-sided total across both tables, decisions.md #44) per (domain,
+concept). It still doesn't distinguish conceptual from applied
+competence within that single scalar — `correct_with_application`
+evidence moves the score by contributing a stronger observation, not by
+tracking applied competence as a separate field — a real, still-open gap
+this schema hasn't closed.
 
 ## Session
 

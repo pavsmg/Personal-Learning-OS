@@ -203,6 +203,40 @@ itself (e.g. "TCP (3 mistakes tracked)") — flattening a session to one
 label loses per-concept nuance; needs a new `SessionPlan` field and a
 `domain-model.md` change, a separate decision.
 
+**2026-08-17 session — #44 built, two-sided evidence memory.** Triggered
+by reviewing a real physics session and finding the model had called
+`save_mistake` on 3 of 8 turns it had explicitly graded correct,
+permanently degrading those concepts' understanding scores under the
+one-sided store. User explicitly overrode #44's data-volume gate (still
+only 20 tracked rows) rather than let more bad data accumulate in a
+schema already known to be wrong — sound because the gate's real concern
+was fitted-parameter scheduling, which this design never does. Built in
+full: additive `evidence` table (`mistakes/store.py`,
+`mistakes/models.py`); end-of-session LLM-graded capture pass
+(`sessions/grading.py`, hooked into `finish_session`, idempotent,
+swallow-to-stderr on failure) replacing the per-turn misuse that caused
+the bug; Anki-shaped stability/difficulty scheduler with fixed,
+FSRS-doc-verified constants (`mistakes/service.py`); `MAX_REVIEW_INTERVAL_DAYS`
+raised 14 → 30 (user-confirmed); `corrected` finally gets meaning.
+New `learning-os-backfill-evidence` CLI regraded all 5 real historical
+session logs — confirmed for real that Quantum Mechanics and
+Electromagnetism (the physics session's exact bug) now grade
+`correct_with_application` and their `mistakes` rows flip `corrected=True`;
+sampled that grade's rationale in the session log and confirmed it cites
+the real rule-11 transfer exchange, not a fluent-sounding definition
+(`pedagogy.md`'s required check, actually run). A real bug was found and
+fixed mid-build: `end_session` wasn't forwarding its `chat_fn` into the
+new grading call, so an unmocked test made real API calls and wrote
+fabricated evidence into the live `mistakes.db` before this was caught —
+fixed by threading `chat_fn` through. `uv run pytest`: 232 passed (203
+before). Full detail: `decisions.md` #44 (flipped Proposed → Decided),
+`domain-model.md`'s new "Evidence" section, `pedagogy.md`'s "Two-sided
+evidence memory" section (flipped built). `backlog.md`'s item closed.
+Not done, worth naming: voice-session grading is structurally wired
+(reads the same shared `logs/<session_id>.log` format) but hasn't been
+exercised against a real voice session yet — the #22 close is
+structural, not yet independently verified live.
+
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in
 `backlog.md`, not here** — this doc stays scoped to `roadmap.md`'s

@@ -140,5 +140,113 @@
     "related_notes": [],
     "severity": "minor",
     "timestamp": "2026-08-13T02:42:31.458319Z"
+  },
+  {
+    "category": "definition",
+    "concept": "Physics",
+    "confidence": 0.93,
+    "corrected": false,
+    "domain": "physics",
+    "explanation": "Learner gave an incomplete definition of physics. Physics is not just the study of matter and energy; it also includes the fundamental forces and interactions between them, and it aims to describe physical behavior with quantitative, testable laws.",
+    "related_notes": [
+      "Physics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T05:58:55.912418Z"
+  },
+  {
+    "category": "definition",
+    "concept": "Physics",
+    "confidence": 0.87,
+    "corrected": false,
+    "domain": "physics",
+    "explanation": "Learner’s distinction is partly right but a bit broad: physics does rely heavily on mathematics and covers phenomena from particles to galaxies, but it is specifically the natural science focused on matter, energy, forces, and interactions, using quantitative, testable laws.",
+    "related_notes": [
+      "Physics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:04:02.726365Z"
+  },
+  {
+    "category": "definition",
+    "concept": "Classical Mechanics",
+    "confidence": 0.9,
+    "corrected": false,
+    "domain": "physics",
+    "explanation": "Learner described classical mechanics as covering macroscopic phenomena, which is broadly right, but 'classical mechanics' specifically means the non-quantum theory of motion, forces, and equilibrium. It is not limited just to what humans can perceive, and it is usually applied where quantum effects are negligible.",
+    "related_notes": [
+      "Classical Mechanics",
+      "Quantum Mechanics",
+      "Mechanics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:08:17.104789Z"
+  },
+  {
+    "category": "application",
+    "concept": "Quantum Mechanics",
+    "confidence": 0.92,
+    "corrected": true,
+    "domain": "physics",
+    "explanation": "Learner correctly connected quantum mechanics to microchips, which is a good application example. Quantum effects are essential for understanding semiconductors and electronic band structure, even though many devices are built from many particles and not just 'tiny objects'.",
+    "related_notes": [
+      "Quantum Mechanics",
+      "Particle & Nuclear Physics",
+      "Condensed Matter Physics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:09:39.801954Z"
+  },
+  {
+    "category": "definition",
+    "concept": "Thermodynamics",
+    "confidence": 0.9,
+    "corrected": false,
+    "domain": "physics",
+    "explanation": "Learner's answer is partly right but incomplete. Thermodynamics is not just the study of temperature; it deals with heat, temperature, energy transfer, and how bulk systems behave, including phase changes like solid, liquid, gas, and plasma.",
+    "related_notes": [
+      "Thermodynamics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:13:35.299952Z"
+  },
+  {
+    "category": "application",
+    "concept": "Thermodynamics",
+    "confidence": 0.92,
+    "corrected": false,
+    "domain": "physics",
+    "explanation": "Learner correctly identified energy transfer in heating water. Heat flows from the hotter source to the cooler water, and the pot helps transfer energy from the flame to the water, mainly by conduction through the metal and then convection within the water.",
+    "related_notes": [
+      "Thermodynamics"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:15:55.451647Z"
+  },
+  {
+    "category": "definition",
+    "concept": "Electromagnetism",
+    "confidence": 0.96,
+    "corrected": true,
+    "domain": "physics",
+    "explanation": "Learner's answer is correct. Electromagnetism studies electric and magnetic fields and their forces, and electricity and magnetism are two manifestations of the same underlying phenomenon.",
+    "related_notes": [
+      "Electromagnetism"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:17:08.171241Z"
+  },
+  {
+    "category": "application",
+    "concept": "Electromagnetism",
+    "confidence": 0.95,
+    "corrected": true,
+    "domain": "physics",
+    "explanation": "Learner correctly applied electromagnetism: moving a magnet near a wire coil induces a current for as long as the magnetic field through the coil is changing. The current is transient if the motion stops or the field becomes steady.",
+    "related_notes": [
+      "Electromagnetism"
+    ],
+    "severity": "low",
+    "timestamp": "2026-08-17T06:17:35.704949Z"
   }
 ]

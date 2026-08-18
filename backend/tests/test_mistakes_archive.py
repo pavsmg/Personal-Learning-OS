@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from learning_os.mistakes import archive, save_mistake, store
+from learning_os.mistakes.models import Evidence
 
 
 def _save(concept: str, domain: str = "classical-ml", confidence: float = 0.5) -> None:
@@ -12,6 +13,20 @@ def _save(concept: str, domain: str = "classical-ml", confidence: float = 0.5) -
         severity="major",
         confidence=confidence,
         domain=domain,
+    )
+
+
+def _save_evidence(concept: str, domain: str = "classical-ml", outcome: str = "correct") -> None:
+    store.insert_evidence(
+        Evidence(
+            domain=domain,
+            concept=concept,
+            timestamp=datetime.now(UTC),
+            outcome=outcome,
+            quality=0.9,
+            source="session_grading",
+            session_id="session-1",
+        )
     )
 
 
@@ -135,3 +150,62 @@ def test_archive_failure_does_not_lose_the_mistake(tmp_path, monkeypatch, capsys
 
     assert [m.concept for m in store.query_mistakes()] == ["Gradient descent"]
     assert "export/backup failed" in capsys.readouterr().err
+
+
+def test_evidence_export_is_written_alongside_the_write(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    _save_evidence("Gradient descent")
+
+    exported = json.loads(archive.evidence_export_path(db_path).read_text(encoding="utf-8"))
+    assert [row["concept"] for row in exported] == ["Gradient descent"]
+
+
+def test_evidence_export_round_trips_losslessly(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    _save_evidence("Gradient descent")
+    original = store.query_evidence()[0]
+
+    exported = json.loads(archive.evidence_export_path(db_path).read_text(encoding="utf-8"))[0]
+
+    assert exported == original.model_dump(mode="json")
+
+
+def test_evidence_export_is_separate_from_mistakes_export(tmp_path, monkeypatch):
+    """decisions.md #44: a second flat file, not merged into the mistakes
+    export -- the mistakes export's lossless round-trip must stay untouched
+    by an unrelated table's schema."""
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    _save("Gradient descent")
+    _save_evidence("Gradient descent")
+
+    mistakes_export = json.loads(archive.export_path(db_path).read_text(encoding="utf-8"))
+    evidence_export = json.loads(archive.evidence_export_path(db_path).read_text(encoding="utf-8"))
+
+    assert len(mistakes_export) == 1
+    assert "explanation" in mistakes_export[0]
+    assert len(evidence_export) == 1
+    assert "outcome" in evidence_export[0]
+
+
+def test_evidence_archive_failure_does_not_lose_the_evidence(tmp_path, monkeypatch, capsys):
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(archive, "write_evidence_export", boom)
+    _save_evidence("Gradient descent")
+
+    assert [e.concept for e in store.query_evidence()] == ["Gradient descent"]
+    assert "evidence export/backup failed" in capsys.readouterr().err

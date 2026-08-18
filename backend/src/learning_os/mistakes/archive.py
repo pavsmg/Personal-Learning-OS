@@ -14,7 +14,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from learning_os.mistakes.models import MistakeEntry
+from learning_os.mistakes.models import Evidence, MistakeEntry
 
 BACKUP_INTERVAL = timedelta(days=1)
 BACKUPS_TO_KEEP = 10
@@ -23,6 +23,13 @@ _BACKUP_STAMP = "%Y%m%dT%H%M%SZ"
 
 def export_path(db_path: Path) -> Path:
     return db_path.with_name(f"{db_path.stem}_export.json")
+
+
+def evidence_export_path(db_path: Path) -> Path:
+    """A second, separate flat file rather than merging into export_path's
+    output -- keeps MistakeEntry's export format (and its lossless
+    round-trip test) untouched by an unrelated table's schema."""
+    return db_path.with_name(f"{db_path.stem}_evidence_export.json")
 
 
 def backups_dir(db_path: Path) -> Path:
@@ -47,6 +54,22 @@ def write_export(entries: list[MistakeEntry], db_path: Path) -> Path:
     path = export_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = [entry.model_dump(mode="json") for entry in sorted(entries, key=_sort_key)]
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _evidence_sort_key(entry: Evidence) -> tuple[str, str, str]:
+    return (entry.timestamp.isoformat(), entry.domain.lower(), entry.concept.lower())
+
+
+def write_evidence_export(entries: list[Evidence], db_path: Path) -> Path:
+    """Same lossless/deterministic/whole-file-rewrite shape as write_export,
+    kept as a genuinely separate function (not a generic merge) so a future
+    change to either table's export format can't accidentally couple to
+    the other's."""
+    path = evidence_export_path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [entry.model_dump(mode="json") for entry in sorted(entries, key=_evidence_sort_key)]
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
@@ -109,3 +132,14 @@ def after_write(entries: list[MistakeEntry], db_path: Path) -> None:
         backup_database(db_path)
     except Exception as exc:  # noqa: BLE001 — durability is best-effort, the write itself already succeeded
         print(f"[archive] export/backup failed: {exc}", file=sys.stderr)
+
+
+def after_evidence_write(entries: list[Evidence], db_path: Path) -> None:
+    """evidence's counterpart to after_write. No second backup_database
+    call: sqlite3's native backup snapshots the whole .db file, which
+    already covers the evidence table living in the same database."""
+    try:
+        write_evidence_export(entries, db_path)
+        backup_database(db_path)
+    except Exception as exc:  # noqa: BLE001 — durability is best-effort, the write itself already succeeded
+        print(f"[archive] evidence export/backup failed: {exc}", file=sys.stderr)

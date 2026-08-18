@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 
+from learning_os.llm_client import LLMReply, ToolCallRequest
 from learning_os.sessions.service import (
     _find_blind_spot_topic,
     _prioritize_by_importance,
@@ -17,6 +18,26 @@ def write_vault(tmp_path, files: dict[str, str]):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+
+class FakeChat:
+    """Mirrors test_career_service.py's FakeChat -- never touches the real
+    LLM API, records every call it receives for assertions."""
+
+    def __init__(self, reply: LLMReply):
+        self._reply = reply
+        self.calls: list[dict] = []
+
+    def __call__(self, messages, tools, tool_choice=None):
+        self.calls.append({"messages": messages, "tools": tools, "tool_choice": tool_choice})
+        return self._reply
+
+
+def grading_reply(grades: list[dict]) -> LLMReply:
+    return LLMReply(
+        content=None,
+        tool_calls=[ToolCallRequest(id="call_1", name="record_session_grades", arguments={"grades": grades})],
+    )
 
 
 def test_create_session_anchors_on_best_search_match(tmp_path, monkeypatch):
@@ -71,14 +92,97 @@ def test_create_session_raises_when_topic_has_no_match(tmp_path, monkeypatch):
 def test_finish_session_marks_known_session_finished(tmp_path, monkeypatch):
     write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     plan = create_session("gradient descent")
+    chat = FakeChat(grading_reply([{"concept": c, "outcome": "correct", "quality": 0.9, "rationale": "x"} for c in plan.concepts]))
 
-    finish_session(plan.session_id)  # should not raise
+    finish_session(plan.session_id, _chat_fn=chat)  # should not raise
 
 
 def test_finish_session_unknown_id_raises_key_error():
     with pytest.raises(KeyError):
         finish_session("does-not-exist")
+
+
+def test_finish_session_records_evidence_from_grading(tmp_path, monkeypatch):
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    plan = create_session("gradient descent")
+    chat = FakeChat(
+        grading_reply(
+            [{"concept": concept, "outcome": "correct", "quality": 0.9, "rationale": "x"} for concept in plan.concepts]
+        )
+    )
+
+    finish_session(plan.session_id, _chat_fn=chat)
+
+    from learning_os.mistakes.service import estimate_mastery
+
+    assert estimate_mastery(plan.domain, plan.concepts[0]) == pytest.approx(1.0)
+
+
+def test_finish_session_is_idempotent(tmp_path, monkeypatch):
+    """A second call must not re-grade or duplicate evidence."""
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    plan = create_session("gradient descent")
+    chat = FakeChat(
+        grading_reply(
+            [{"concept": concept, "outcome": "correct", "quality": 0.9, "rationale": "x"} for concept in plan.concepts]
+        )
+    )
+
+    finish_session(plan.session_id, _chat_fn=chat)
+    finish_session(plan.session_id, _chat_fn=chat)  # should not raise, should not re-grade
+
+    assert len(chat.calls) == 1
+
+    from learning_os.mistakes import store
+
+    assert len(store.query_evidence(session_id=plan.session_id)) == len(plan.concepts)
+
+
+def test_finish_session_swallows_grading_failure(tmp_path, monkeypatch, capsys):
+    write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    plan = create_session("gradient descent")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("model unavailable")
+
+    finish_session(plan.session_id, _chat_fn=boom)  # should not raise
+
+    assert "session grading failed" in capsys.readouterr().err
+
+
+def test_finish_session_grades_undiscussed_concept_not_reached(tmp_path, monkeypatch):
+    """If the grading model's response omits a planned concept entirely,
+    it must default to not_reached rather than being silently dropped."""
+    write_vault(
+        tmp_path,
+        {
+            "Gradient descent.md": "core optimization concept, linked to [[Optimizer]].",
+            "Optimizer.md": "general term for optimization algorithms.",
+        },
+    )
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    plan = create_session("gradient descent", max_concepts=2)
+    # Only grades the first concept -- omits the rest of the plan.
+    chat = FakeChat(
+        grading_reply([{"concept": plan.concepts[0], "outcome": "correct", "quality": 0.9, "rationale": "x"}])
+    )
+
+    finish_session(plan.session_id, _chat_fn=chat)
+
+    from learning_os.mistakes import store
+
+    outcomes = {e.concept: e.outcome for e in store.query_evidence(session_id=plan.session_id)}
+    assert outcomes[plan.concepts[0]] == "correct"
+    assert all(outcomes[concept] == "not_reached" for concept in plan.concepts[1:])
 
 
 def test_record_turn_unknown_id_raises_key_error():
@@ -358,10 +462,16 @@ def test_create_session_automatic_mode_prioritizes_importance_within_overdue_tie
             )
         )
 
-    # Same confidence (same 7.5-day interval), close days_ago -> same overdue
-    # bucket. Without the priority layer, Leaf (ratio 0.8) would outrank Hub
-    # (ratio 0.667) on raw urgency alone.
-    insert_at("Leaf", domain="classical-ml", confidence=0.5, days_ago=6)
+    # decisions.md #44: a single mistake's stability can only ever shrink
+    # from its 1.0-day starting point (an "incorrect" observation never
+    # grows it), so its review interval always floors at
+    # MIN_REVIEW_INTERVAL_DAYS regardless of confidence -- overdue_ratio
+    # reduces to plain days_since. Same confidence and days_ago -> an exact
+    # ratio *and* understanding tie, inserted in Leaf-then-Hub order, so
+    # without the priority layer Leaf would keep that insertion-order
+    # position ahead of Hub. The importance layer must promote Hub (the
+    # more central vault concept) past that tie.
+    insert_at("Leaf", domain="classical-ml", confidence=0.5, days_ago=5)
     insert_at("Hub", domain="classical-ml", confidence=0.5, days_ago=5)
 
     plan = create_session(topic=None)

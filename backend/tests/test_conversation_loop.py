@@ -10,13 +10,16 @@ def write_vault(tmp_path, files: dict[str, str]):
 
 
 class ScriptedChat:
-    """Fake chat_fn: returns each LLMReply in order, one per call. No network."""
+    """Fake chat_fn: returns each LLMReply in order, one per call. No network.
+    Accepts tool_choice (unused) to match chat_completion's real signature --
+    end_session forwards this same chat_fn into finish_session's grading
+    pass, which always calls with a forced tool_choice."""
 
     def __init__(self, replies: list[LLMReply]):
         self._replies = list(replies)
         self.calls: list[list[dict]] = []
 
-    def __call__(self, messages, tools):
+    def __call__(self, messages, tools, tool_choice=None):
         self.calls.append([dict(m) for m in messages])
         return self._replies.pop(0)
 
@@ -105,10 +108,30 @@ def test_send_message_resolves_save_mistake_tool_call(tmp_path, monkeypatch):
 def test_end_session_sends_nudge_then_finishes_and_summarizes(tmp_path, monkeypatch):
     write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     chat = ScriptedChat(
         [
             LLMReply(content="Opening.", tool_calls=[]),
             LLMReply(content="Good luck with gradient descent going forward!", tool_calls=[]),
+            LLMReply(
+                content=None,
+                tool_calls=[
+                    ToolCallRequest(
+                        id="grade_1",
+                        name="record_session_grades",
+                        arguments={
+                            "grades": [
+                                {
+                                    "concept": "Gradient descent",
+                                    "outcome": "not_reached",
+                                    "quality": 0.9,
+                                    "rationale": "never actually quizzed in this exchange",
+                                }
+                            ]
+                        },
+                    )
+                ],
+            ),
         ]
     )
     state, _ = start_session("gradient descent", chat_fn=chat)
@@ -117,7 +140,7 @@ def test_end_session_sends_nudge_then_finishes_and_summarizes(tmp_path, monkeypa
 
     assert closing == "Good luck with gradient descent going forward!"
     assert summary.session_id == state.session_id
-    last_call_messages = chat.calls[-1]
+    last_call_messages = chat.calls[-2]
     assert last_call_messages[-1] == {"role": "user", "content": END_SESSION_NUDGE}
 
 
@@ -129,6 +152,7 @@ def test_text_session_writes_a_transcript_with_tool_calls(tmp_path, monkeypatch)
 
     write_vault(tmp_path, {"Gradient descent.md": "core optimization concept."})
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setattr(session_log_module, "LOG_DIR", tmp_path / "logs")
     chat = ScriptedChat(
         [
@@ -139,6 +163,25 @@ def test_text_session_writes_a_transcript_with_tool_calls(tmp_path, monkeypatch)
             LLMReply(content="How would you explain gradient descent?", tool_calls=[]),
             LLMReply(content="Close, but not quite.", tool_calls=[]),
             LLMReply(content="Good work today.", tool_calls=[]),
+            LLMReply(
+                content=None,
+                tool_calls=[
+                    ToolCallRequest(
+                        id="grade_1",
+                        name="record_session_grades",
+                        arguments={
+                            "grades": [
+                                {
+                                    "concept": "Gradient descent",
+                                    "outcome": "incorrect",
+                                    "quality": 0.9,
+                                    "rationale": "learner's explanation was corrected mid-session",
+                                }
+                            ]
+                        },
+                    )
+                ],
+            ),
         ]
     )
 
@@ -153,6 +196,9 @@ def test_text_session_writes_a_transcript_with_tool_calls(tmp_path, monkeypatch)
     assert "ASSISTANT: How would you explain gradient descent?" in transcript
     assert "SUMMARY:" in transcript
     assert transcript.strip().endswith("SESSION END")
+    # decisions.md #44: the grading pass's rationale is sampleable from the
+    # same log, not just the discrete outcome.
+    assert "GRADE: Gradient descent -> incorrect" in transcript
 
 
 def test_tool_calls_are_logged_even_without_debug(tmp_path, monkeypatch):

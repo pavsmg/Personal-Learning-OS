@@ -3,17 +3,39 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from learning_os.mistakes import store
-from learning_os.mistakes.models import MistakeEntry
+from learning_os.mistakes.models import Evidence, MistakeEntry
 from learning_os.mistakes.service import (
     estimate_mastery,
     get_learning_profile,
     get_recent_mistakes,
+    record_evidence,
     recommend_domain,
     recommend_review,
     recommend_review_scored,
     save_mistake,
     search_mistakes,
 )
+
+
+def insert_evidence_at(
+    concept: str,
+    domain: str,
+    outcome: str,
+    quality: float = 0.9,
+    days_ago: float = 0,
+    session_id: str = "session-1",
+) -> None:
+    store.insert_evidence(
+        Evidence(
+            domain=domain,
+            concept=concept,
+            timestamp=datetime.now(UTC) - timedelta(days=days_ago),
+            outcome=outcome,
+            quality=quality,
+            source="session_grading",
+            session_id=session_id,
+        )
+    )
 
 
 def insert_mistake_at(concept: str, domain: str, confidence: float, days_ago: float) -> None:
@@ -171,7 +193,12 @@ def test_get_learning_profile_aggregates_with_mistake_count(tmp_path, monkeypatc
     assert len(profile) == 1
     assert profile[0].concept == "Gradient descent"
     assert profile[0].mistake_count == 2
-    assert profile[0].conceptual_understanding == pytest.approx(0.5)  # 1.0 - avg(0.4, 0.6)
+    assert profile[0].observation_count == 2
+    # decisions.md #44: a *weighted* average, not a plain one -- each
+    # mistake's pull on the score is scaled by its own confidence. Values
+    # are (1-0.4)=0.6 weighted 0.4, and (1-0.6)=0.4 weighted 0.6:
+    # (0.6*0.4 + 0.4*0.6) / (0.4+0.6) = 0.48, not the old plain 0.5.
+    assert profile[0].conceptual_understanding == pytest.approx(0.48)
 
 
 def test_get_learning_profile_empty_domain_returns_empty_list(tmp_path, monkeypatch):
@@ -356,3 +383,123 @@ def test_recommend_domain_returns_general_when_it_is_the_only_domain_tracked(tmp
     insert_mistake_at("Only tracked mistake", domain="general", confidence=0.5, days_ago=5)
 
     assert recommend_domain() == "general"
+
+
+# --- decisions.md #44: two-sided evidence ---
+
+
+def test_evidence_only_concept_is_visible_in_learning_profile(tmp_path, monkeypatch):
+    """The actual point of two-sided data: a concept with real evidence but
+    zero mistakes must not stay invisible."""
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_evidence_at("Electromagnetism", domain="physics", outcome="correct", quality=0.95)
+
+    profile = get_learning_profile("physics")
+
+    assert len(profile) == 1
+    assert profile[0].concept == "Electromagnetism"
+    assert profile[0].mistake_count == 0
+    assert profile[0].observation_count == 1
+    assert profile[0].conceptual_understanding == pytest.approx(1.0)
+    assert estimate_mastery("physics", "Electromagnetism") == pytest.approx(1.0)
+
+
+def test_not_reached_evidence_does_not_make_a_concept_visible_or_scored(tmp_path, monkeypatch):
+    """decisions.md #44's resolved open question: a planned-but-never-quizzed
+    concept is recorded (for telemetry) but stays absent for scoring,
+    otherwise mere discussion would count as evidence."""
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_evidence_at("Waves & Optics", domain="physics", outcome="not_reached", quality=0.0)
+
+    assert get_learning_profile("physics") == []
+    assert estimate_mastery("physics", "Waves & Optics") is None
+    # But it's still on record, not silently dropped.
+    assert [e.outcome for e in store.query_evidence(domain="physics")] == ["not_reached"]
+
+
+def test_record_evidence_flips_corrected_on_matching_mistakes(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    save_mistake(
+        concept="Quantum Mechanics",
+        explanation="thought it only applies to atoms",
+        category="conceptual",
+        severity="minor",
+        confidence=0.9,
+        domain="physics",
+    )
+    assert get_recent_mistakes(domain="physics")[0].corrected is False
+
+    record_evidence(
+        [
+            Evidence(
+                domain="physics",
+                concept="Quantum Mechanics",
+                timestamp=datetime.now(UTC),
+                outcome="correct_with_application",
+                quality=0.92,
+                source="session_grading",
+                session_id="session-1",
+            )
+        ]
+    )
+
+    assert get_recent_mistakes(domain="physics")[0].corrected is True
+
+
+def test_record_evidence_does_not_flip_corrected_for_incorrect_or_not_reached(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    save_mistake(
+        concept="Thermodynamics",
+        explanation="x",
+        category="conceptual",
+        severity="minor",
+        confidence=0.8,
+        domain="physics",
+    )
+
+    record_evidence(
+        [
+            Evidence(
+                domain="physics",
+                concept="Thermodynamics",
+                timestamp=datetime.now(UTC),
+                outcome="not_reached",
+                quality=0.0,
+                source="session_grading",
+                session_id="session-1",
+            )
+        ]
+    )
+
+    assert get_recent_mistakes(domain="physics")[0].corrected is False
+
+
+def test_conceptual_understanding_blends_mistakes_and_later_evidence(tmp_path, monkeypatch):
+    """A concept that was once a mistake and later demonstrated correct
+    should score higher than the mistake alone -- the actual mechanism
+    two-sided evidence exists to provide."""
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Electromagnetism", domain="physics", confidence=0.9, days_ago=10)
+    mistake_only = estimate_mastery("physics", "Electromagnetism")
+
+    insert_evidence_at("Electromagnetism", domain="physics", outcome="correct", quality=0.9, days_ago=0)
+    with_evidence = estimate_mastery("physics", "Electromagnetism")
+
+    assert with_evidence > mistake_only
+
+
+def test_recommend_domain_counts_not_reached_evidence_as_recent_activity(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    insert_mistake_at("Old mistake", domain="domain-a", confidence=0.5, days_ago=30)
+    insert_evidence_at("Recently graded", domain="domain-a", outcome="not_reached", days_ago=1)
+    insert_mistake_at("Only touch", domain="domain-b", confidence=0.5, days_ago=15)
+
+    # domain-a's not_reached evidence is more recent than its old mistake,
+    # so domain-b (untouched for 15 days) is the stalest domain overall.
+    assert recommend_domain() == "domain-b"
