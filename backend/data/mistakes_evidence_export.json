@@ -223,5 +223,122 @@
     "session_id": "dd795780-b59b-4828-93cb-375112f2e9a8",
     "source": "session_grading",
     "timestamp": "2026-08-18T02:47:27.602220Z"
+  },
+  {
+    "concept": "software",
+    "domain": "general",
+    "outcome": "not_reached",
+    "quality": 0.89,
+    "session_id": "1ee432b2-9654-4ac7-8aac-fbd037031a50",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:39:49.727159Z"
+  },
+  {
+    "concept": "Software development",
+    "domain": "general",
+    "outcome": "not_reached",
+    "quality": 0.94,
+    "session_id": "1ee432b2-9654-4ac7-8aac-fbd037031a50",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:39:49.727159Z"
+  },
+  {
+    "concept": "Software engineering",
+    "domain": "general",
+    "outcome": "correct",
+    "quality": 0.98,
+    "session_id": "1ee432b2-9654-4ac7-8aac-fbd037031a50",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:39:49.727159Z"
+  },
+  {
+    "concept": "GraphRAG",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.2,
+    "session_id": "9c3985fd-398a-4591-bec0-771d8ac56703",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:59:32.304682Z"
+  },
+  {
+    "concept": "Knowledge Graph",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.15,
+    "session_id": "9c3985fd-398a-4591-bec0-771d8ac56703",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:59:32.304682Z"
+  },
+  {
+    "concept": "LLM",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.18,
+    "session_id": "9c3985fd-398a-4591-bec0-771d8ac56703",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:59:32.304682Z"
+  },
+  {
+    "concept": "Prompt Injection",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.16,
+    "session_id": "9c3985fd-398a-4591-bec0-771d8ac56703",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:59:32.304682Z"
+  },
+  {
+    "concept": "RAG",
+    "domain": "agents-llm",
+    "outcome": "correct",
+    "quality": 0.98,
+    "session_id": "9c3985fd-398a-4591-bec0-771d8ac56703",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T03:59:32.304682Z"
+  },
+  {
+    "concept": "GraphRAG",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.98,
+    "session_id": "07545e25-69f3-468e-ae74-e5b4fe565bc7",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T04:58:46.664939Z"
+  },
+  {
+    "concept": "Knowledge Graph",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.98,
+    "session_id": "07545e25-69f3-468e-ae74-e5b4fe565bc7",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T04:58:46.664939Z"
+  },
+  {
+    "concept": "LLM",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.98,
+    "session_id": "07545e25-69f3-468e-ae74-e5b4fe565bc7",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T04:58:46.664939Z"
+  },
+  {
+    "concept": "Prompt Injection",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.98,
+    "session_id": "07545e25-69f3-468e-ae74-e5b4fe565bc7",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T04:58:46.664939Z"
+  },
+  {
+    "concept": "RAG",
+    "domain": "agents-llm",
+    "outcome": "not_reached",
+    "quality": 0.99,
+    "session_id": "07545e25-69f3-468e-ae74-e5b4fe565bc7",
+    "source": "session_grading",
+    "timestamp": "2026-08-18T04:58:46.664939Z"
   }
 ]

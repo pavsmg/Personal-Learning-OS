@@ -23,6 +23,7 @@ learning-os-voice = "learning_os.realtime.loop:run"
 learning-os-language-import = "learning_os.language.cli:run"
 learning-os-mcp = "learning_os.mcp_server.server:run"
 learning-os-backup = "learning_os.mistakes.cli:run"
+learning-os-observations = "learning_os.mistakes.observations_cli:run"
 learning-os-classify-domains = "learning_os.classification.cli:run"
 learning-os-backfill-evidence = "learning_os.sessions.backfill:run"
 

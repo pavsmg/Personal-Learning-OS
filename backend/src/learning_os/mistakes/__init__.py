@@ -1,9 +1,12 @@
-from learning_os.mistakes.models import Evidence, EvidenceOutcome, MasteryEstimate, MistakeEntry
+from learning_os.mistakes.models import Evidence, EvidenceOutcome, EvidenceReview, MasteryEstimate, MistakeEntry
 from learning_os.mistakes.service import (
+    MAX_EXPLANATION_CHARS,
     estimate_mastery,
     get_learning_profile,
     get_recent_mistakes,
+    list_observations,
     record_evidence,
+    record_evidence_review,
     recommend_domain,
     recommend_review,
     recommend_review_scored,
@@ -14,12 +17,16 @@ from learning_os.mistakes.service import (
 __all__ = [
     "Evidence",
     "EvidenceOutcome",
+    "EvidenceReview",
     "MasteryEstimate",
     "MistakeEntry",
+    "MAX_EXPLANATION_CHARS",
     "estimate_mastery",
     "get_learning_profile",
     "get_recent_mistakes",
+    "list_observations",
     "record_evidence",
+    "record_evidence_review",
     "recommend_domain",
     "recommend_review",
     "recommend_review_scored",

@@ -14,7 +14,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from learning_os.mistakes.models import Evidence, MistakeEntry
+from learning_os.mistakes.models import Evidence, EvidenceReview, MistakeEntry
 
 BACKUP_INTERVAL = timedelta(days=1)
 BACKUPS_TO_KEEP = 10
@@ -30,6 +30,13 @@ def evidence_export_path(db_path: Path) -> Path:
     output -- keeps MistakeEntry's export format (and its lossless
     round-trip test) untouched by an unrelated table's schema."""
     return db_path.with_name(f"{db_path.stem}_evidence_export.json")
+
+
+def reviews_export_path(db_path: Path) -> Path:
+    """Third flat file for decisions.md #63's human corrections -- kept
+    separate from both other exports so each table's lossless round-trip
+    stays independently verifiable."""
+    return db_path.with_name(f"{db_path.stem}_reviews_export.json")
 
 
 def backups_dir(db_path: Path) -> Path:
@@ -54,7 +61,9 @@ def write_export(entries: list[MistakeEntry], db_path: Path) -> Path:
     path = export_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = [entry.model_dump(mode="json") for entry in sorted(entries, key=_sort_key)]
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    _atomic_write_json(
+        path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    )
     return path
 
 
@@ -70,8 +79,51 @@ def write_evidence_export(entries: list[Evidence], db_path: Path) -> Path:
     path = evidence_export_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = [entry.model_dump(mode="json") for entry in sorted(entries, key=_evidence_sort_key)]
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    _atomic_write_json(
+        path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    )
     return path
+
+
+def _reviews_sort_key(entry: EvidenceReview) -> tuple[str, str, str, str]:
+    return (
+        entry.timestamp.isoformat(),
+        entry.session_id,
+        entry.domain.lower(),
+        entry.concept.lower(),
+    )
+
+
+def write_reviews_export(entries: list[EvidenceReview], db_path: Path) -> Path:
+    """Same lossless/deterministic/atomic shape as the other two exports,
+    kept separate so each table's format evolves independently."""
+    path = reviews_export_path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [entry.model_dump(mode="json") for entry in sorted(entries, key=_reviews_sort_key)]
+    _atomic_write_json(
+        path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    )
+    return path
+
+
+def _atomic_write_json(path: Path, text: str) -> None:
+    """decisions.md #63: write to a temp sibling then os.replace, so a
+    crash mid-write can never leave a half-written export behind -- and
+    concurrent writers cannot interleave partial contents."""
+    import os
+    import tempfile
+
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def _existing_backups(db_path: Path) -> list[Path]:
@@ -143,3 +195,12 @@ def after_evidence_write(entries: list[Evidence], db_path: Path) -> None:
         backup_database(db_path)
     except Exception as exc:  # noqa: BLE001 — durability is best-effort, the write itself already succeeded
         print(f"[archive] evidence export/backup failed: {exc}", file=sys.stderr)
+
+
+def after_reviews_write(entries: list[EvidenceReview], db_path: Path) -> None:
+    """reviews' counterpart to after_write -- same best-effort contract."""
+    try:
+        write_reviews_export(entries, db_path)
+        backup_database(db_path)
+    except Exception as exc:  # noqa: BLE001 — durability is best-effort, the write itself already succeeded
+        print(f"[archive] reviews export/backup failed: {exc}", file=sys.stderr)

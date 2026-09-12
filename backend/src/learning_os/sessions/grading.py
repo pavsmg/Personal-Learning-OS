@@ -9,6 +9,11 @@ from learning_os.sessions.models import GradingResult
 
 ChatFn = Callable[..., LLMReply]
 
+# decisions.md #63: version stamp recorded on the session ledger so a
+# future grading-prompt change can distinguish old grades from new ones
+# without re-reading transcripts.
+GRADER_VERSION = "session_grading/v1"
+
 _RECORD_SESSION_GRADES_TOOL = {
     "type": "function",
     "function": {

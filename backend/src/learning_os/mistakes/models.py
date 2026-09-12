@@ -1,20 +1,22 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MistakeEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    domain: str
-    concept: str
-    explanation: str
-    category: str
-    severity: str
+    domain: str = Field(min_length=1)
+    concept: str = Field(min_length=1)
+    explanation: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    severity: str = Field(min_length=1)
     timestamp: datetime
     corrected: bool
-    confidence: float
+    # decisions.md #63: confidence is the observer's certainty (0-1), not
+    # the size of the knowledge gap -- enforced here, not just documented.
+    confidence: float = Field(ge=0.0, le=1.0)
     related_notes: list[str]
 
 
@@ -30,13 +32,35 @@ EvidenceOutcome = Literal["not_reached", "incorrect", "partial", "correct", "cor
 class Evidence(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    domain: str
-    concept: str
+    domain: str = Field(min_length=1)
+    concept: str = Field(min_length=1)
     timestamp: datetime
     outcome: EvidenceOutcome
-    quality: float
-    source: str
-    session_id: str
+    # decisions.md #63: quality is the grader's certainty in this grade
+    # (0-1), enforced here so an out-of-range value fails fast at the
+    # write path instead of silently skewing scheduling math.
+    quality: float = Field(ge=0.0, le=1.0)
+    source: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+
+
+class EvidenceReview(BaseModel):
+    """decisions.md #63: an immutable human correction of one evidence
+    row's outcome. The original row is never edited or deleted -- reviews
+    form their own append-only history and the latest one wins for
+    scoring. Result-only by design: concept/domain attribution stays as
+    the grader wrote it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    session_id: str = Field(min_length=1)
+    domain: str = Field(min_length=1)
+    concept: str = Field(min_length=1)
+    previous_outcome: EvidenceOutcome
+    new_outcome: EvidenceOutcome
+    reason: str = Field(min_length=1)
+    reviewer: str = Field(min_length=1, default="human")
+    timestamp: datetime
 
 
 class MasteryEstimate(BaseModel):

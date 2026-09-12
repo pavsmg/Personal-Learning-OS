@@ -2,11 +2,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from learning_os.mistakes import store
-from learning_os.mistakes.models import Evidence, MasteryEstimate, MistakeEntry
+from learning_os.mistakes.models import Evidence, EvidenceReview, MasteryEstimate, MistakeEntry
 
 # Mirrors sessions/service.py's DEFAULT_DOMAIN -- not imported, since
 # sessions already depends on mistakes and importing back would cycle.
 UNTRACKED_DOMAIN = "general"
+
+# decisions.md #63: mistake explanations stay short by construction -- a
+# one-line misconception summary for personalizing future questions, not
+# a transcript fragment. Longer text is truncated on write (old rows are
+# grandfathered, never rewritten by migration).
+MAX_EXPLANATION_CHARS = 280
 
 # --- decisions.md #44: fixed, documented scheduling constants ---
 #
@@ -94,7 +100,7 @@ def save_mistake(
     entry = MistakeEntry(
         domain=domain,
         concept=concept,
-        explanation=explanation,
+        explanation=explanation[:MAX_EXPLANATION_CHARS],
         category=category,
         severity=severity,
         timestamp=datetime.now(UTC),
@@ -114,18 +120,90 @@ def get_recent_mistakes(domain: str | None = None, limit: int = 10) -> list[Mist
     return store.query_mistakes(domain=domain, limit=limit, order_by_recent=True)
 
 
-def record_evidence(entries: list[Evidence]) -> None:
+def record_evidence(entries: list[Evidence]) -> dict[str, int]:
     """The single write path for two-sided evidence -- sessions/service.py's
     finish_session calls this once per session, with one entry per planned
     concept (decisions.md #44 point 2). A later correct/correct_with_
     application entry for a concept flips that concept's earlier mistakes
     rows to corrected=True (point 6); not_reached entries are still stored
     (so a planned-but-never-quizzed concept isn't silently dropped) but
-    never trigger a correction flip."""
-    for entry in entries:
-        store.insert_evidence(entry)
-        if entry.outcome in ("correct", "correct_with_application"):
-            store.mark_corrected(entry.domain, entry.concept, before=entry.timestamp)
+    never trigger a correction flip.
+
+    decisions.md #63: delegated to store.save_session_evidence -- one
+    transaction per session, idempotent per (session_id, domain, concept)
+    with first-write-wins. Returns {"inserted", "corrected"} counts."""
+    return store.save_session_evidence(entries)
+
+
+def record_evidence_review(
+    session_id: str,
+    concept: str,
+    new_outcome: str,
+    reason: str,
+    domain: str | None = None,
+    reviewer: str = "human",
+) -> EvidenceReview:
+    """Appends a human correction of one graded outcome (decisions.md #63,
+    result-only). When the domain is omitted it must resolve to exactly
+    one evidence row for (session_id, concept), else ValueError. A
+    corrected-to-correct outcome flips matching mistakes to corrected,
+    mirroring record_evidence; the original row is never edited."""
+    candidates = store.query_evidence(session_id=session_id, concept=concept, domain=domain)
+    if domain is None and len({c.domain.lower() for c in candidates}) > 1:
+        raise ValueError(
+            f"Concept {concept!r} in session {session_id!r} exists in "
+            f"multiple domains -- pass --domain explicitly."
+        )
+    if not candidates:
+        raise KeyError(f"No evidence for session={session_id!r} concept={concept!r}")
+    target = candidates[0]
+    review = EvidenceReview(
+        session_id=target.session_id,
+        domain=target.domain,
+        concept=target.concept,
+        previous_outcome=target.outcome,
+        new_outcome=new_outcome,  # type: ignore[arg-type] -- validated by pydantic at runtime
+        reason=reason,
+        reviewer=reviewer,
+        timestamp=datetime.now(UTC),
+    )
+    # If a newer review landed since the caller listed, insert_review
+    # raises ValueError (stale) -- but previous_outcome here was just read,
+    # so refresh it to the currently effective one first.
+    overlay = store.effective_outcomes()
+    key = (target.session_id, target.domain.lower(), target.concept.lower())
+    if key in overlay:
+        review = review.model_copy(update={"previous_outcome": overlay[key][0]})
+    store.insert_review(review)
+    if review.new_outcome in ("correct", "correct_with_application"):
+        store.mark_corrected(review.domain, review.concept, before=review.timestamp)
+    return review
+
+
+def list_observations(
+    session_id: str | None = None,
+    domain: str | None = None,
+) -> list[dict]:
+    """Rows for the observations CLI: effective outcome/quality with the
+    raw grade alongside whenever a human review overrode it."""
+    overlay = store.effective_outcomes()
+    rows = []
+    for entry in store.query_evidence(session_id=session_id, domain=domain, order_by_recent=True):
+        key = (entry.session_id, entry.domain.lower(), entry.concept.lower())
+        effective = overlay.get(key)
+        rows.append(
+            {
+                "session_id": entry.session_id,
+                "domain": entry.domain,
+                "concept": entry.concept,
+                "outcome": effective[0] if effective else entry.outcome,
+                "quality": effective[1] if effective else entry.quality,
+                "graded_outcome": entry.outcome,
+                "reviewed": effective is not None,
+                "timestamp": entry.timestamp.isoformat(),
+            }
+        )
+    return rows
 
 
 def _conceptual_understanding(observations: list[_Observation]) -> float:
@@ -234,7 +312,9 @@ def get_learning_profile(domain: str | None = None) -> list[MasteryEstimate]:
         mistakes_by_key.setdefault((mistake.domain, mistake.concept), []).append(mistake)
 
     evidence_by_key: dict[tuple[str, str], list[Evidence]] = {}
-    for entry in store.query_evidence(domain=domain):
+    # decisions.md #63: scoring always reads the human-reviewed overlay,
+    # so a correction takes effect without editing the immutable raw row.
+    for entry in store.query_evidence_effective(domain=domain):
         evidence_by_key.setdefault((entry.domain, entry.concept), []).append(entry)
 
     # dict.fromkeys, not set() union: preserves first-seen order
@@ -268,7 +348,7 @@ def estimate_mastery(domain: str, concept: str) -> float | None:
     (decisions.md #45), now merging both tables (decisions.md #44)."""
     observations = _merge_observations(
         store.query_mistakes(domain=domain, concept=concept),
-        store.query_evidence(domain=domain, concept=concept),
+        store.query_evidence_effective(domain=domain, concept=concept),
     )
     if not observations:
         return None
@@ -285,7 +365,7 @@ def recommend_review_scored(domain: str | None = None) -> list[tuple[str, float]
         mistakes_by_concept.setdefault(mistake.concept, []).append(mistake)
 
     evidence_by_concept: dict[str, list[Evidence]] = {}
-    for entry in store.query_evidence(domain=domain):
+    for entry in store.query_evidence_effective(domain=domain):
         evidence_by_concept.setdefault(entry.concept, []).append(entry)
 
     now = datetime.now(UTC)

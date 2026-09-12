@@ -3,14 +3,17 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 
+from datetime import UTC, datetime
+
 from learning_os.config import get_settings
 from learning_os.language import LANGUAGES, get_curriculum
 from learning_os.llm_client import chat_completion
 from learning_os.mistakes import get_learning_profile, record_evidence, recommend_domain, recommend_review_scored
+from learning_os.mistakes import store as mistakes_store
 from learning_os.retrieval import concept_importance, get_note, most_important_notes, related_notes, search_notes
 from learning_os.retrieval.models import Note, NoteSummary
 from learning_os.session_log import LOG_DIR, SessionLog
-from learning_os.sessions.grading import ChatFn, grade_session
+from learning_os.sessions.grading import GRADER_VERSION, ChatFn, grade_session
 from learning_os.sessions.models import SessionPlan, SessionSummary
 
 DEFAULT_TARGET_DIFFICULTY = "foundational"
@@ -302,6 +305,20 @@ def create_session(topic: str | None = None, max_concepts: int = 5) -> SessionPl
         expected_duration_minutes=_expected_duration(evidence),
     )
     _SESSIONS[plan.session_id] = _SessionRecord(plan=plan)
+    # decisions.md #63: compact ledger row (plan metadata only, no
+    # transcript). Best-effort like archive hooks: the ledger is
+    # observability, and must never break session creation.
+    try:
+        mistakes_store.save_session(
+            plan.session_id,
+            plan.domain,
+            plan.objective,
+            plan.concepts,
+            datetime.now(UTC),
+            grader_version=GRADER_VERSION,
+        )
+    except Exception as exc:  # noqa: BLE001 -- ledger is best-effort
+        print(f"[sessions] session ledger write failed: {exc}", file=sys.stderr)
     return plan
 
 
@@ -322,7 +339,7 @@ def _session_transcript(session_id: str, record: _SessionRecord) -> str:
     return "\n".join(f"{role.upper()}: {content}" for role, content in record.turns)
 
 
-def finish_session(session_id: str, _chat_fn: ChatFn = chat_completion) -> None:
+def finish_session(session_id: str, _chat_fn: ChatFn = chat_completion, _log: SessionLog | None = None) -> None:
     """Sets finished unconditionally first (unchanged contract), then runs
     decisions.md #44's end-of-session grading pass exactly once per
     session -- the idempotency guard skips grading (no duplicate evidence
@@ -330,7 +347,16 @@ def finish_session(session_id: str, _chat_fn: ChatFn = chat_completion) -> None:
     swallow-to-stderr, mirroring archive.after_write's precedent: it's
     best-effort enrichment and must not crash session teardown for either
     loop, and stays synchronous (confirmed acceptable for v1 -- matches
-    this project's existing LLM-call style, e.g. the career module)."""
+    this project's existing LLM-call style, e.g. the career module).
+
+    `_log`: pass the caller's own already-open SessionLog (both loops have
+    one by the time they call this) rather than defaulting to opening a
+    second handle on the same file -- decisions.md #61. Only opens (and
+    closes) its own handle when the caller has none, e.g. direct unit
+    tests that call finish_session without going through either loop.
+    Underscore-prefixed, like _chat_fn, so the tool registry's schema
+    auto-derivation excludes it -- SessionLog isn't a pydantic-serializable
+    type, and this parameter isn't model-facing regardless."""
     if session_id not in _SESSIONS:
         raise KeyError(f"Unknown session: {session_id}")
     record = _SESSIONS[session_id]
@@ -338,21 +364,32 @@ def finish_session(session_id: str, _chat_fn: ChatFn = chat_completion) -> None:
         return
     record.finished = True
 
-    log: SessionLog | None = None
+    owns_log = _log is None
     try:
         transcript = _session_transcript(session_id, record)
-        log = SessionLog(session_id)
+        if _log is None:
+            _log = SessionLog(session_id)
         evidence = grade_session(
-            session_id, record.plan.domain, record.plan.concepts, transcript, log=log, _chat_fn=_chat_fn
+            session_id, record.plan.domain, record.plan.concepts, transcript, log=_log, _chat_fn=_chat_fn
         )
         record_evidence(evidence)
+        _mark_session_ledger(session_id, "graded")
     except Exception as exc:  # noqa: BLE001 -- grading is best-effort, must not crash session teardown
         print(f"[grading] session grading failed: {exc}", file=sys.stderr)
-        if log is not None:
-            log.write(f"GRADING FAILED: {exc}")
+        if _log is not None:
+            _log.write(f"GRADING FAILED: {exc}")
+        _mark_session_ledger(session_id, "grading_failed")
     finally:
-        if log is not None:
-            log.close()
+        if owns_log and _log is not None:
+            _log.close()
+
+
+def _mark_session_ledger(session_id: str, grading_status: str) -> None:
+    """Best-effort ledger update mirroring the in-memory finished flag."""
+    try:
+        mistakes_store.mark_session(session_id, datetime.now(UTC), grading_status)
+    except Exception as exc:  # noqa: BLE001 -- ledger is best-effort
+        print(f"[sessions] session ledger update failed: {exc}", file=sys.stderr)
 
 
 def summarize_session(session_id: str) -> SessionSummary:

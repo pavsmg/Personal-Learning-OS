@@ -46,6 +46,14 @@ uv run learning-os-backup                # force a backup + refresh the export
 uv run learning-os-backup --export-only  # refresh the export only
 ```
 
+Graded outcomes can be reviewed and corrected by hand (result-only; the
+original grade stays on record) — see `docs/decisions.md` #63:
+
+```sh
+uv run learning-os-observations list --session <id>
+uv run learning-os-observations review --session <id> --concept <name> --outcome partial --reason "..."
+```
+
 Run the test suite (or a single test) with:
 
 ```sh
@@ -66,6 +74,8 @@ uv run pytest tests/test_main.py -v    # one file
 - [`docs/retrieval.md`](docs/retrieval.md) — retrieval over the vault
 - [`docs/learning-engine.md`](docs/learning-engine.md) — the session loop
 - [`docs/mcp.md`](docs/mcp.md) — later-stage MCP exposure
+- [`docs/technologies.md`](docs/technologies.md) — flat inventory of
+  technologies/techniques in use today and plausible for later
 - [`docs/roadmap.md`](docs/roadmap.md) — build order
 - [`docs/milestones.md`](docs/milestones.md) — detailed task-by-task
   tracker for the original build; start here each session

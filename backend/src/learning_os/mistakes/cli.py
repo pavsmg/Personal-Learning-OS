@@ -19,6 +19,16 @@ def run() -> None:
     export = archive.write_export(entries, db_path)
     print(f"Exported {len(entries)} mistakes to {export}")
 
+    # decisions.md #63: the backup entry point refreshes all three flat
+    # files, not just mistakes -- previously the evidence export only
+    # refreshed on evidence writes, with no manual repair path.
+    evidence = store.query_evidence()
+    evidence_export = archive.write_evidence_export(evidence, db_path)
+    print(f"Exported {len(evidence)} evidence rows to {evidence_export}")
+    reviews = store.query_reviews()
+    reviews_export = archive.write_reviews_export(reviews, db_path)
+    print(f"Exported {len(reviews)} reviews to {reviews_export}")
+
     if args.export_only:
         return
 

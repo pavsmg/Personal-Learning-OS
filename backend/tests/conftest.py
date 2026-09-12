@@ -13,6 +13,16 @@ def _isolate_session_logs(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_database(tmp_path, monkeypatch):
+    """decisions.md #63: create_session now writes a compact ledger row,
+    so a test that never sets DB_PATH would otherwise write into the
+    repo's live mistakes.db (previously session creation was
+    memory-only and this was harmless). Tests that set DB_PATH
+    explicitly override this, since their monkeypatch applies later."""
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+
+@pytest.fixture(autouse=True)
 def _clear_lru_caches():
     get_settings.cache_clear()
     get_vault_index.cache_clear()
