@@ -77,6 +77,32 @@ rule:
   Check: run a real `learning-os-voice` session, let it end, and confirm
   `evidence` rows and `GRADE:` log lines appear for it exactly like a text
   session's.
+- **Voice audio/transcription fixes across #58, #59, #60, and #61** —
+  four real sessions and an Opus-led review surfaced problems in
+  sequence: mis-transcription and startup stutter (#58); a blocked event
+  loop, audio cut off at close, VAD fragmentation, a barge-in cancel race
+  (#59); console interleaving and stale-response bleed-through (#60); and
+  a full hardening pass (#61) that found #59's audio-drain math was
+  actually still broken, #60's response-id filter could make Enter stop
+  ending the session, tool calls could still block dispatch, Ctrl+C could
+  hang for minutes, the echo-cancel module could leak on startup failure,
+  barge-in never truncated the server-side item, and more (16 findings
+  total, see `decisions.md` #61 for the full list). All fixed at the code
+  level, including a new async-iterable `FakeRealtimeConnection` test
+  harness (`test_realtime_loop_dispatch.py`) that finally exercises the
+  live event-dispatch logic directly rather than only helper functions.
+  **None of it verified against a real voice session yet** — four
+  decisions deep on this system without a single live confirmation.
+  Check, in one real `learning-os-voice` session on the same
+  speakers/open-mic setup: (a) the transcript reads as real words, not
+  fragments or hallucinated phrases, and keywords/model swap seem to
+  help; (b) the assistant's audio doesn't sound raspy during its own
+  turns; (c) the closing recap's audio isn't cut off; (d) no
+  `response_cancel_not_active` error appears at all now (not just
+  self-heals); (e) the console output stays readable throughout, not just
+  around barge-in; (f) Ctrl+C exits immediately, not after a long hang;
+  (g) barge-in mid-sentence doesn't have the tutor later refer to
+  something you never heard it say.
 
 ## Improvement ideas — session planner
 
@@ -259,3 +285,36 @@ Discussion-stage, none of these are scoped or decided yet (opened
   `summarize_skills_for_cv` only, not `analyze_job_fit` (job relevance,
   not vault centrality, is the right signal there). All four named
   applications of the centrality primitive are now built.
+- [ ] **Replace raw in-degree in `most_important()` with transitive
+  `requires` depth** (`decisions.md` #62). The tradeoff #37 logged — raw
+  in-degree conflating "foundational" with "generic and overused" — is now
+  measurable rather than suspected: on the 102-note typed subset the two
+  rankings overlap on only 4 of the top 10, and every note the raw count
+  over-ranks (`HTTP` 29 backlinks/0 requires, `TCP-IP` 20/0, `Linux
+  Directory Hierarchy` 28/0) is either a hub or a leaf nothing depends on.
+  PageRank, named in #37 as the fix, is no longer the first choice: it
+  re-weights an untyped graph, whereas `requires` is a *declared*
+  prerequisite. Needs an untyped fallback for the ~90% of notes still
+  untyped, and the result must state which population it covers.
+- [ ] **Relation-aware traversal in `related()`.** `requires`, `kind-of`,
+  `generalizes`, `assumes`, `supersedes` are transitive; `part-of`,
+  `contrasts-with`, `causes` are not (Winston et al. 1987 for the
+  `part-of` case). Today's traversal is relation-blind, so once typed
+  edges are consumed it would chain non-transitive ones and assert things
+  nobody wrote.
+- [ ] **Discount `moc`/`hub` out-links when scoring importance.** An index
+  note's links are a table of contents, not dependencies. Cheap, and it
+  fixes most of the hub inflation on its own — independent of whether the
+  `requires` ranking lands.
+- [ ] **Topological study order from `requires`.** Verified as a DAG (no
+  cycles, 102 notes). Would let the session planner refuse to introduce a
+  concept before its prerequisites, which nothing currently prevents.
+- [ ] **Question shape from relation type.** `contrasts-with` →
+  discrimination, `often-confused-with` → deliberate trap, `solves` → "why
+  does this exist" (answer already in the property), `assumes` → boundary
+  question. Check against `pedagogy.md` before building — this is a new
+  learning mechanism, not a retrieval change.
+- [ ] **Skip `type: reference` and `status: stub` notes as session
+  anchors.** Reference notes (charts, tables) generate the wrong question
+  shape by construction; stubs are too thin to build on. Both are already
+  machine-detectable.

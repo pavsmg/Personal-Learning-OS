@@ -743,8 +743,12 @@ the way a text session's mistakes do. Voice sessions today: real teaching
 loop, not yet a real memory loop. This is the concrete scope of "not full
 parity" — everything else checked out identical to text.
 
-**Status:** Decided (2026-08-11) — the persistence gap is open, tracked
-here and in `milestones.md`, not silently dropped.
+**Status:** Decided (2026-08-11), superseded 2026-09-11 by **#64**. The
+diagnosis in this entry holds — the tool genuinely never fires — but the
+resolution ("document as an unresolved limitation") no longer stands. #64
+establishes that the fix is not a better prompt, a different realtime
+model, or a backend nudge, but removing the model from the persistence
+path entirely. Read #64 before treating this gap as open-ended.
 
 ---
 
@@ -2945,3 +2949,717 @@ domain is tracked yet — all three direct unit tests on
 a tracked related note is preferred over an untracked one, the anchor is
 never overridden even when untracked itself, and an untracked domain
 preserves today's existing order unchanged).
+
+---
+
+## 58. Real voice-session bug: mis-transcription and playback stutter, two targeted config/timing fixes
+
+**Context:** User ran a real `learning-os-voice` electromagnetism session
+(speakers, open mic — not headphones) and reported two problems: the
+tutor "did not catch what I was saying," and the AI's voice was laggy
+immediately after it started speaking. The session log
+(`logs/60d700b2-....log`) confirms the first, concretely — in response to
+"How would you explain the basic idea of electromagnetism?" the recorded
+transcript reads:
+
+> USER: Good riddance and be safe, Force. May the Force be with you.
+
+That text has no relation to anything the tutor said or the topic under
+discussion — the pattern (a plausible-sounding but unrelated stock
+phrase) is a known Whisper failure mode on quiet, noisy, or otherwise
+low-quality input, not a genuine mis-hearing of real words. The user's
+setup (open mic + speakers, not a headset) is exactly the scenario where
+this is most likely: room noise and the assistant's own voice have more
+opportunity to reach the mic than with headphones, even with PipeWire's
+`module-echo-cancel` (`realtime/audio.py`) doing its job.
+
+For the lag: `Speaker.start()`/`open_session()` both run back-to-back at
+session start (`realtime/loop.py`), and `open_session()` immediately
+triggers the model to start talking. If the `paplay` subprocess hasn't
+finished connecting to its PipeWire sink by the time the first
+`response.output_audio.delta` events arrive, the very first response's
+audio can stutter while the pipeline catches up — matching "laggy
+immediately after it started speaking" specifically (a one-time startup
+symptom, not a report of sustained lag throughout).
+
+**Decision — two narrowly-scoped fixes, not a full audio pipeline
+redesign:**
+
+1. **`noise_reduction: {"type": "far_field"}`** added to the session's
+   input audio config. Per the SDK's own documentation, `far_field` is
+   explicitly recommended for "laptop or conference room microphones" as
+   opposed to `near_field` for headsets — matches this setup exactly.
+   Filters audio *before* it reaches VAD/transcription, which is
+   documented to reduce both false-positive turn detection and this
+   category of transcription failure.
+2. **`transcription.language = "en"`**, but only when `plan.domain not in
+   LANGUAGES`. The SDK's docs state supplying the language "improves
+   accuracy and latency." Scoped to non-language domains deliberately: a
+   Turkish-practice session's learner may genuinely be speaking Turkish,
+   and forcing `"en"` there would actively hurt transcription instead of
+   helping it — the exact class of mistake #31's language-domain handling
+   already exists to avoid elsewhere in this project.
+3. **`SPEAKER_WARMUP_SECONDS = 0.3`** sleep inserted between
+   `speaker.start()` and `open_session()`. Not tuned against a real
+   measurement of PipeWire/paplay handshake time — a defensible starting
+   point (same "direction principled, magnitude isn't tuned" spirit as
+   `SHAKY_SETTLED_THRESHOLD` elsewhere), long enough to clear typical
+   subprocess/device connection overhead without adding a noticeably
+   perceptible delay before the tutor starts talking.
+
+**Explicitly not done:** no VAD `threshold` change (the default 0.5 was
+kept — raising it trades quiet-speech sensitivity for noise robustness,
+and there isn't yet evidence this was a VAD false-positive rather than a
+transcription-quality problem specifically); no redesign of `Speaker`'s
+write path into a queued/decoupled writer (the observed symptom points at
+one-time startup latency, not sustained buffer starvation, so the
+smaller, more targeted fix was preferred).
+
+**Status:** Decided and built (2026-08-18) — `_session_config`
+unit-tested directly (`noise_reduction` present; `language="en"` set for
+a non-language domain, omitted for a language domain). `uv run pytest`:
+241 passed (238 before, 3 new). **Not yet verified live** — this is a
+config/timing change to real audio behavior that can only be confirmed by
+actually running another voice session; added to `backlog.md`'s pending
+real-session validation list.
+
+**Superseded in part by #59**: the user tried again and hit deeper
+problems this entry's fixes didn't touch — see #59.
+
+---
+
+## 59. Second real voice-session bug report: blocked event loop, audio cutoff at close, VAD fragmenting speech
+
+**Context:** User tried `learning-os-voice` again after #58's fixes and
+reported it was worse in new ways: the tutor interrupted them mid-answer
+before they'd finished a thought; it "didn't capture what I was saying at
+all"; a real API error appeared; the closing recap's audio got cut off
+mid-sentence even though the transcript showed a complete sentence; and
+the assistant's own voice sounded "raspy, buggy" specifically whenever it
+was its turn to speak. The real session log
+(`logs/1ee432b2-....log`) confirms concrete evidence for three of these,
+independently of each other:
+
+```
+[03:37:48] USER: science.
+[03:37:51] USER: Thank you.
+[03:37:52] ASSISTANT: Sure, let's break it down a bit more...
+[03:37:52] ERROR: RealtimeError(message='Cancellation failed: no active
+  response found', type='invalid_request_error',
+  code='response_cancel_not_active', ...)
+[03:39:47] ASSISTANT: That's totally fine. If you feel ready to wrap up...
+```
+
+Three unrelated fragments where one continuous answer should be ("science."
+then "Thank you." two seconds apart as *separate* transcribed turns) is
+what a too-short silence-detection window looks like. The
+`response_cancel_not_active` error is `realtime/loop.py`'s barge-in
+handler (`connection.response.cancel()` on `input_audio_buffer.
+speech_started` while `response_in_progress`) racing a response that had
+already finished server-side by the time the cancel reached it — the
+local flag and server state briefly disagreed. The ~2-minute gap
+afterward is consistent with `response_in_progress` staying stuck `True`
+from that point on, since nothing in the loop ever reset it except a
+`response.done` event that, per the race above, may never have arrived
+for that specific response.
+
+**The "raspy, buggy" audio during the assistant's turn has a clean,
+independently-confirmed root cause, found by reading the code, not
+guessed:** `handle_tool_call` called `call_tool(name, **arguments)`
+*synchronously* — real vault/SQLite I/O, including a first-ever
+~2-second vault-index build (measured directly in this project's own
+`test_retrieval_real_vault.py` timings) — directly inside the same
+`async for event in connection:` loop that also feeds `Speaker.write()`
+and reads the microphone. Tool calls happen almost every turn (rule 5
+grounds before quizzing) and land right before the assistant starts
+talking — exactly when audio delivery is most timing-sensitive. A
+synchronous call of that duration stalls the entire event loop, including
+whatever's mid-flight to the speaker, for its full length. This is the
+single most likely explanation for choppy assistant audio specifically
+correlated with "when it's its turn to speak," confirmed structurally
+(the loop genuinely has no concurrency there today) even without a raw
+audio capture to inspect.
+
+**The audio-cutoff-at-close bug is also structural, not speculative:**
+`response.done` means the server finished *generating and sending* audio
+— it says nothing about whether `paplay` has finished *playing* what's
+already been written to its stdin. The closing sequence broke out of the
+loop and killed the speaker immediately on `response.done`, so whatever
+was still buffered in `paplay` at that instant was cut off mid-playback,
+even though the full text had already arrived via a separate transcript-
+delta event stream (which is why the printed/logged transcript looked
+complete while the audio wasn't).
+
+**Decision — four targeted fixes:**
+
+1. **`asyncio.to_thread` around `call_tool`** in `handle_tool_call`
+   (`realtime/loop.py`). The single highest-confidence fix here: moves
+   synchronous tool I/O off the event loop entirely, so it can no longer
+   starve mic reads or speaker writes regardless of how long a given tool
+   call takes.
+2. **`Speaker.wait_until_drained()`** (`realtime/audio.py`): tracks bytes
+   written and when the current playback run started, estimates
+   outstanding buffered audio as `(bytes_written / bytes_per_second) -
+   elapsed_wall_clock`, and sleeps that long before the closing sequence
+   tears the speaker down. Deliberately *not* used for barge-in
+   (`Speaker.restart()`) — barge-in's whole point is immediate cutoff.
+   The arithmetic is split into a pure `_remaining_playback_seconds`
+   function specifically so it's unit-testable without real subprocess
+   timing.
+3. **`silence_duration_ms: 800`** on `server_vad`, raised from the SDK's
+   500ms default — directly targets the observed fragmentation, giving a
+   longer thinking-pause room to not read as "done talking."
+4. **Defensive `response_in_progress` reset** on an `error` event whose
+   `code == "response_cancel_not_active"`: since the race means the
+   response may already be done server-side without ever delivering its
+   own `response.done` locally, forcing the flag back in sync is the
+   self-healing move — the alternative (trusting the flag forever) is what
+   plausibly produced the multi-minute stuck window.
+
+**Explicitly not done, and why:** no change to the barge-in mechanism
+itself (immediate `speaker.restart()` on speech-detected is correct
+behavior, not the bug); no attempt to fully explain the ~2-minute gap
+beyond the mechanism above, since reconstructing exact client/server
+timing from a text log alone isn't possible — the fix targets the
+concrete, reproducible race, not a guessed timeline. The `far_field`
+noise-reduction/language-hint/warmup-delay fixes from #58 are unchanged
+and still believed correct; nothing here contradicts them.
+
+**Status:** Decided and built (2026-08-18). `handle_tool_call`'s
+threading is directly tested by proving a concurrently scheduled task
+keeps running while a fake slow synchronous tool call is in flight (a
+real bug in that test's own fake-function signature was caught and fixed
+during writing it — it needs to accept `name` positionally, matching
+`call_tool`'s real signature, or the exception path fires before the
+sleep and the test passes for the wrong reason). `_remaining_playback_
+seconds` is directly unit-tested (positive backlog, caught-up, never-
+negative, zero-bytes cases). `silence_duration_ms` is asserted in
+`_session_config`'s output. The `response_cancel_not_active` reset and
+`wait_until_drained`'s wiring into the closing sequence are not
+automated-tested — consistent with this project's existing boundary that
+the real event/audio orchestration in `realtime/loop.py` needs real
+hardware to exercise (`test_realtime_loop.py`'s own stated scope).
+`uv run pytest`: 247 passed (241 before, 6 new). **Not yet verified
+live** — added to `backlog.md`'s pending real-session validation list,
+alongside #58's still-open item (both need the same next real session to
+check).
+
+---
+
+## 60. Console interleaving and stale-response bleed-through, from a third real voice session
+
+**Context:** User asked to review the log of a third real voice session
+(RAG/agents-llm domain, `logs/9c3985fd-....log`) and separately reported
+that `learning-os-voice`'s console output was hard to read: `"You said:
+..."` appeared to land in the middle of the assistant's still-printing
+speech. Checking the log file itself first ruled out one explanation:
+`"You said: ..."` never appears in the log file at all — it's a
+console-only `print()`, never `log.write()`'d (`realtime/loop.py`'s
+`conversation.item.input_audio_transcription.completed` handler). The log
+file itself is one complete, timestamped line per turn, correctly
+ordered.
+
+So the reported mixing is a real console-rendering bug, and the RAG
+session log gave the actual mechanism: `response.output_audio_transcript.
+delta` is printed with `end=""` (no newline) as it streams in, building
+the assistant's line up incrementally. If a barge-in cancellation races a
+response that's already finishing server-side — the exact
+`response_cancel_not_active` error #59 already found and saw recur in
+this same session — stray `response.output_audio_transcript.delta` /
+`response.output_audio.delta` events for the now-cancelled response can
+still arrive afterward, with nothing to distinguish them from a live
+one. Before this entry, the loop had no notion of "which response is
+this event actually for" at all: it printed/spoke/logged whatever
+arrived, whenever it arrived. A stray trailing delta printing without a
+leading newline is exactly what lands mid-line and reads as the user's
+transcript and the assistant's getting mixed together — and the same
+stale audio, if written to a freshly `restart()`-ed speaker, is also a
+second, independent contributor to #59's "raspy, buggy" audio complaint,
+not just the blocked-event-loop cause already fixed there.
+
+**Decision:**
+
+1. **Track `current_response_id`**, set from `event.response.id` on
+   `response.created`. Both delta handlers (`response.output_audio_
+   transcript.delta`, `response.output_audio.delta`) and `response.done`
+   now check `event.response_id`/`event.response.id` against it and
+   `continue` (skip) on a mismatch — a stray event from an
+   already-cancelled response no longer prints, plays, or gets logged as
+   if it belonged to whatever comes next.
+2. **Barge-in explicitly invalidates state, not just cancels.** On
+   `speech_started` with a response in progress: after
+   `response.cancel()`/`speaker.restart()`, also set
+   `current_response_id = None` (so any further stray deltas fail the
+   match above), clear `assistant_transcript` (so a later stray
+   `response.done` — itself now filtered out by the id check, but kept as
+   defense in depth — can't glue an abandoned partial sentence onto a
+   later one), and reset `response_in_progress = False` directly, rather
+   than waiting on a `response.done` that this same race has already
+   shown can misbehave.
+3. **`assistant_line_open` tracks whether the console cursor is mid-line**
+   from an in-progress delta print. `"You said: ..."` and the
+   `speech_started` `"[listening...]"` print now check it first and emit
+   a newline before printing if so — the direct fix for the reported
+   readability problem, independent of the staleness fix above (both
+   contribute to the same visible symptom, from different mechanisms).
+
+**Status:** Decided and built (2026-08-18). Not unit-tested: this logic
+lives inside `run_voice_session`'s live event-processing loop, which
+needs a real bidirectional event stream to exercise meaningfully and
+falls inside the same stated boundary `test_realtime_loop.py` already
+draws around real audio/event orchestration (`FakeConnection` there only
+records outgoing calls, it doesn't support iterating incoming events).
+`uv run pytest`: 247 passed, unchanged (no new tests — a real gap, not
+silently accepted: worth revisiting if this class of bug recurs, by
+building a proper fake async-iterable connection rather than continuing
+to rely on real sessions to catch regressions here). **Not yet verified
+live** — added to `backlog.md` alongside #58/#59, all three now needing
+the same next real session to check together.
+
+---
+
+## 61. Opus-reviewed hardening pass on the whole real-time voice system
+
+**Context:** After #58/#59/#60 (three real bug reports in three real
+sessions, all in `realtime/loop.py`/`audio.py`), the user asked for a
+deep review of the entire real-time voice system rather than continuing
+to fix one report at a time. Reviewed by Claude Opus 5 as an independent
+read-only agent, given the three prior entries as context and told to
+verify their fixes were actually complete, not just present. It found 16
+numbered issues, several proving that #59/#60's own fixes were
+incomplete or, in one case, treating a self-inflicted symptom. Full
+review transcript isn't preserved verbatim here; this entry records what
+was decided and built from it, keyed to the reviewer's own numbering for
+traceability.
+
+**Decisions, in the order they mattered:**
+
+1. **Deleted the barge-in `response.cancel()` call entirely** — the
+   reviewer's finding #5, and the actual root cause of the error class
+   #59 and #60 spent two entries building defenses around.
+   `ServerVad.interrupt_response` defaults to `true`: the server already
+   auto-cancels the in-flight response the instant it sees
+   `input_audio_buffer.speech_started`. The client's own explicit cancel
+   was racing the server's own cancel, which is exactly what produced
+   every real `response_cancel_not_active` error seen in three separate
+   session logs. Local cleanup (killing playback, invalidating
+   `current_response_id`/the partial transcript) is still entirely the
+   client's job and is unchanged; only the redundant network call is
+   gone.
+2. **Fixed `wait_until_drained`'s math for real** (finding #1) — #59's
+   fix tracked bytes-written and playback-start time per *speaker
+   lifetime*, not per response, so in any session with real idle gaps
+   (the learner talking, thinking pauses) the elapsed-time term dwarfed
+   the audio-time term and the estimate went permanently negative — a
+   silent no-op on every closing recap after a normal multi-minute
+   conversation, not just occasionally. Replaced with a virtual playback
+   deadline (`_advance_deadline`, `realtime/audio.py`): each write
+   advances a deadline from `max(deadline, now)`, so an idle gap can't
+   manufacture false backlog, and a real backlog is still tracked
+   correctly. Paired with finding #9 below, which also made `wait_until_
+   drained` correct with respect to a queue that hasn't been fully
+   written yet.
+3. **`current_response_id` invalidation could make Enter stop ending the
+   session** (finding #2) — the id filter #60 added meant a barge-in
+   during the closing recap could `continue` past the very `response.
+   done` the `break` was waiting on, since barge-in already nulls
+   `current_response_id`. Fixed by treating a barge-in that happens while
+   `closing_requested` as "the learner is done listening," breaking
+   immediately rather than waiting for a response that may now never
+   match.
+4. **One `response.create()` per turn, not per tool call** (findings #3
+   and #8). Real logs already showed a single response requesting two
+   tool calls (`search_notes` then `get_note` in the same turn); calling
+   `response.create()` after each one individually could double-create or
+   starve a response depending on server timing, and each call was also
+   `await`ed inline, blocking dispatch of every other event (including
+   audio delivery and barge-in) for the tool's full duration. Tool calls
+   are now dispatched as concurrent tasks the instant `response.
+   function_call_arguments.done` arrives, tracked per response id; `
+   response.done` awaits whichever of that response's tasks are still
+   running, submits every output, and creates exactly one follow-up
+   response if there were any.
+5. **Ctrl+C could hang for minutes** (finding #4) — the "press Enter to
+   finish" reader used `asyncio.to_thread(sys.stdin.readline)`; a thread
+   blocked in a real `readline()` syscall cannot be cancelled by cancelling
+   the *task* wrapping it, only by the process actually exiting, so
+   `end_task.cancel()` did nothing and teardown could stall on Python's
+   own executor-shutdown timeout. Replaced with `loop.connect_read_pipe` +
+   `asyncio.StreamReader`, which responds to cancellation immediately.
+6. **Resource acquisition moved inside the `try`/`finally`** (finding
+   #7) — `load_echo_cancel_module`/`Speaker.start()`/task creation
+   previously ran *before* the `try` started, so a failure partway through
+   (e.g. `paplay` missing) leaked the just-loaded PipeWire module
+   permanently, since the fixed source/sink names would then collide with
+   the next run. Now guarded with `module_id`/`speaker`/`mic_task`/
+   `end_task` sentinels the `finally` checks before cleaning up, plus a
+   new idempotent `reap_stale_echo_cancel_modules()` called at the start
+   of every session as a safety net for whatever a previous hard-killed
+   run already leaked.
+7. **Barge-in truncates the server-side item** (finding #6) — previously
+   only local playback was cut; the server's conversation history kept
+   the *entire* generated utterance, so the model could later refer to
+   content the learner never actually heard, and the mismatch also
+   reached #44's grading transcript. Now tracks bytes/time per audio item
+   and sends `conversation.item.truncate` with an honest `audio_end_ms`
+   estimate on barge-in.
+8. **`Speaker.write()` decoupled from the dispatch loop** (finding #9) —
+   `stdin.drain()`'s backpressure was awaited inline, so a slow-draining
+   `paplay` blocked processing of every other event (barge-in detection
+   included) for as long as the backlog took to clear — the same failure
+   shape as the tool-call blocking in point 4, by a different mechanism.
+   `Speaker` now queues writes and drains them from a dedicated writer
+   task; `write()` itself just enqueues and returns.
+9. **Transcription failures and unknown events are no longer silently
+   dropped** (finding #10, part) — added a handler for `conversation.
+   item.input_audio_transcription.failed` (previously invisible: the
+   learner's turn would just vanish from both the console and the log,
+   which #44's grader then scores as a gap with no explanation), and a
+   catch-all `else` that logs any other event type at least once instead
+   of ignoring it.
+10. **Transcription model, keywords, and remaining tunables moved to
+    `Settings`** (finding #10, part) — swapped the hardcoded `whisper-1`
+    default (the model most associated with the near-silence
+    hallucination pattern #58's bad transcript matched) for `settings.
+    openai_realtime_transcription_model`, defaulting to `gpt-4o-mini-
+    transcribe`; added `keywords: plan.concepts` so the transcription
+    model gets the session's own domain vocabulary as a hint. Also moved
+    `silence_duration_ms` and the `noise_reduction` type into `Settings`
+    so either can be A/B'd against real sessions without a code change.
+11. **Dead mic/end-request tasks no longer fail silently** (finding
+    #11) — `_task_failure_logger` attaches to both via `add_done_
+    callback`; a task we cancelled ourselves at teardown stays silent, an
+    exception or an unexpected early finish (parec dying, `request_
+    closing` raising) now prints and logs instead of leaving the learner
+    talking to a mic that quietly stopped listening.
+12. **Server-initiated disconnects no longer end the session in silence
+    or a raw traceback** (finding #12) — wraps the dispatch loop's `
+    WebSocketConnectionClosedError` and distinguishes a clean close that
+    happened without `closing_requested` (logged explicitly, rather than
+    looking identical to a normal ending).
+13. **#60's console-newline fix, completed** (finding #13) — `_fresh_
+    line()` is now called before every print that isn't itself a delta
+    (`[thinking...]`, `API error:`, the closing summary), not just the two
+    #60 originally guarded; a factored-out helper instead of the
+    duplicated inline checks that made the gap easy to miss the first
+    time.
+14. **A dead `paplay` no longer crashes the session** (finding #15) —
+    the writer task now catches `BrokenPipeError`/`ConnectionResetError`
+    on write, logs, and stops feeding that (dead) process instead of
+    propagating the exception into the dispatch loop.
+15. **Partial assistant turns are no longer lost on an abrupt exit**
+    (finding #16, part) — `finally` now flushes whatever's left in
+    `assistant_transcript` (tagged `ASSISTANT (incomplete):`) before
+    teardown, so a Ctrl+C or connection error mid-response still leaves a
+    real trace in both the log and #44's grading input.
+16. **`finish_session` no longer opens a second `SessionLog` handle on
+    the same file** (finding #16, part) — gained an underscore-prefixed
+    `_log` parameter (excluded from the tool schema, like `_chat_fn`);
+    both loops now pass their own already-open log through instead of
+    `finish_session` silently opening its own second handle on the same
+    path. `get_event_loop()` calls in `audio.py` switched to the
+    non-deprecated `get_running_loop()` (finding #16, part). `parec`/
+    `paplay` stderr is now captured and logged instead of interleaving
+    raw subprocess output into the transcript on the terminal (finding
+    #16, part).
+
+**Grading prompt mitigation, not a structural fix (finding #14):** a real
+log showed a `USER:` line appearing chronologically after the `ASSISTANT:`
+reply it was actually answering, because input transcription completes
+asynchronously and can lag behind the model's own (much faster) response
+generation. A full fix would mean reordering the log by conversation item
+rather than by arrival time — out of scope here. Instead,
+`grading_prompt.py` now explicitly tells the grader this can happen and
+to judge a `USER:` line by what it actually answers, not strictly its
+position in the file.
+
+**Explicit non-goals, named so they don't get silently assumed later:**
+- **Reconnect-on-disconnect.** The reviewer noted the SDK's own
+  reconnect path (`on_reconnecting`) hands back a brand-new Realtime
+  session with no memory of the old one's config — reconnecting safely
+  would mean re-sending `session.update` and possibly losing in-flight
+  audio regardless. Ending the session cleanly on a disconnect (point 12)
+  is the whole fix for now; automatic reconnection is real, separate
+  scope.
+- **A smarter speaker-warmup signal.** `SPEAKER_WARMUP_SECONDS` (#58)
+  stays a fixed guess, not a real readiness probe (e.g. writing silence
+  and waiting for the first successful drain) — the reviewer's suggested
+  alternative, not built here for lack of a way to verify it live.
+- **Echo-cancel sample rate.** The reviewer flagged, as explicitly
+  speculative, that running `module-echo-cancel` at 24kHz against
+  PipeWire's more common 48kHz default might mean the AEC is internally
+  resampling — plausible, unconfirmed, needs a real `pactl list sources`
+  check against actual hardware, not a code change made blind.
+- **Full chronological reordering of the log** (finding #14's complete
+  form) — the prompt-level mitigation above is the shipped fix; a real
+  reorder-by-conversation-item is bigger scope, deferred.
+
+**Status:** Decided and built (2026-08-18). New async-iterable
+`FakeRealtimeConnection` test harness added (`test_realtime_loop_
+dispatch.py`) specifically to close the testing gap #60 flagged — the
+first time this project's tests exercise `run_voice_session`'s actual
+event-dispatch logic rather than only its helper functions. Covers:
+multiple tool calls in one response produce exactly one follow-up (not
+one-per-call); a stray delta/audio/done event for an already-cancelled
+response never reaches the speaker, the transcript, or the log;
+`response.cancel` is never called on barge-in; barge-in sends a real
+`conversation.item.truncate`; an unhandled event type is logged, not
+dropped. `uv run pytest`: 258 passed (247 before, 11 new, across `
+audio.py`'s deadline math, the new dispatch-loop harness, `_session_
+config`'s new fields, and the grading-prompt note). **Not yet verified
+live** — this is the fourth entry in a row that can only be fully
+confirmed by an actual voice session; #58, #59, #60, and #61 all now
+need the same next real session, tracked together in `backlog.md`.
+
+---
+
+## 62. Typed relations in the vault as a retrieval signal, replacing raw backlink counting
+
+**Context:** `most_important()` (#37) ranks notes by raw backlink
+in-degree, and that entry logged the tradeoff it couldn't resolve: raw
+in-degree conflates "foundational" with "generic and overused," with
+PageRank-style recursive weighting named as the eventual fix. The deeper
+problem is that a `[[wikilink]]` is untyped — `TCP → UDP` (a contrast) and
+`TCP → Handshake` (a prerequisite) are the same edge to any counter, so no
+amount of re-weighting an untyped graph can separate them. PageRank would
+have made the existing signal smoother, not more correct.
+
+Separately, the vault had no way to express order (a pipeline), and
+nothing distinguished an index note's out-links from a real dependency.
+
+**Decision:** The vault now carries an explicit relation vocabulary in
+frontmatter, specified in its own `Knowledge graph relations.md` (the
+authority; this entry summarises only what matters to this project):
+
+- **Node types** — `moc`, `hub`, `concept`, `process`, `reference`. A
+  daily note has no frontmatter, and that absence is the marker.
+- **Relation types** — 25 names in seven families, grouped by the question
+  the edge answers: *what is it* (`kind-of`, `part-of`, `instance-of`,
+  `also-known-as`), *what follows* (`requires`, `generalizes`,
+  `derived-from`, `equivalent-to`), *why it happens* (`causes`, `enables`,
+  `prevents`), *what it's for* (`solves`, `implements`, `measured-by`),
+  *how we know* (`supports`, `refutes`, `assumes`), *what it contrasts
+  with* (`contrasts-with`, `analogous-to`, `trades-off-against`,
+  `often-confused-with`), and *when* (`supersedes`, `precedes`,
+  `next`/`prev`).
+
+The vocabulary is not invented here. It converges with the families in
+Khoo & Na's ARIST survey (2006), the UMLS Semantic Network's five
+groupings, WordNet, RST, and SKOS — the overlap between independently
+built systems is the argument that these relations are basic rather than
+arbitrary. Winston, Chaffin & Herrmann (1987) is the source of a rule this
+backend must honour: `part-of` is six distinct relations and **does not
+chain**.
+
+For this project, three properties matter more than the names:
+
+1. **`requires` is transitive, and forms a DAG** — verified, no cycles at
+   102 notes. Following it transitively gives a genuine foundational
+   ranking, and a topological sort gives a legal study order (never
+   introduce `TCP` before `Handshake`). This is the replacement for raw
+   in-degree, and it is better-founded than PageRank because the edge is
+   *declared* a prerequisite rather than inferred from link volume.
+2. **`contrasts-with` and `part-of` are NOT transitive.** A graph library
+   will happily chain them and produce confident claims nobody asserted.
+   Any traversal must be relation-aware.
+3. **Node type gates the count.** Out-links from a `moc`/`hub` are index
+   entries, not dependencies, and must be discounted when scoring.
+
+Measured on a 102-note typed subset (two Linux chapters, the
+filesystem/storage cluster, networking, and part of the ML cluster; 163
+relation values, all seven validation rules passing):
+
+- **The two rankings overlap on only 4 of the top 10.** Raw counting's
+  top three are `filesystem` (37 backlinks), `HTTP` (29), and `Linux
+  Directory Hierarchy` (28); by transitive `requires` they are `storage
+  device` (12), `filesystem` (9), and `UID and GID` (5).
+- **Over-ranked by raw counting:** `HTTP` (29 backlinks, 0 notes require
+  it), `Linux Directory Hierarchy` (28/0 — a `hub`, i.e. an index),
+  `TCP-IP` (20/0 — also a hub), `UDP` (14/0), `DNS` (13/0), `Btrfs`
+  (12/0). These are mentioned everywhere and are prerequisites for
+  nothing; they are exactly the failure mode #37 described.
+- **Under-ranked by raw counting:** `UID and GID` — 5 backlinks, but 5
+  notes transitively depend on it. `storage device` ranks 8th by
+  backlinks and 1st by prerequisite depth.
+
+**Status:** Proposed (2026-09-11). The vault-side vocabulary is decided
+and applied; nothing is built in this backend yet, and the decision to
+*consume* it is what remains open. Two honest limits before that
+happens. **Coverage is 111 of ~1,000 notes (~11%)** — any consumer needs
+an untyped fallback for the rest, and `most_important()` must not silently
+return a ranking computed over a tenth of the vault. **Most of the
+vocabulary is still unused**, including the whole evidential family
+(`supports`, `refutes`, `assumes`); their value is a claim from prior art,
+not from this vault.
+
+Amended 2026-09-11: `analogous-to` was initially recorded here as blocked
+on splitting cross-domain notes like `Entropy` per field. That was wrong.
+The relation is now defined as requiring **no common parent concept** —
+if you can name what both sides are instances of, it is `kind-of` and the
+resemblance is *derivable* from two edges rather than asserted. Under that
+definition `Entropy` is one concept with one formula, not two analogous
+ones, and a search of the vault's cross-domain notes found no valid
+instance at all. **A consumer should therefore treat `analogous-to` as
+rare by design**, and should derive sibling-analogy from shared `kind-of`
+targets rather than waiting for explicit edges that will mostly never be
+written.
+Scoped as backlog items under retrieval / knowledge graph; this entry
+flips to Decided when a real consumer is built and the ranking is
+confirmed better on a live session, not just in the measurement above.
+
+---
+
+## 63. Compact, durable learning memory: versioned schema, atomic sessions, human reviews
+
+**Context:** The database is the component this system's knowledge of the
+learner depends on, and the audit found it was the least hardened one:
+`finish_session` wrote each evidence row in its own transaction (a crash
+mid-session left half a session graded, with no durable mark to detect
+or retry it); sessions themselves lived only in an in-memory dict, so a
+restart erased plan, transcript reference, and grading state; no CHECK,
+UNIQUE, index, or schema version existed; every connection used
+SQLite defaults (no WAL, no busy_timeout) while text, voice, MCP,
+importer, and backup can all share the file; `learning-os-backup`
+re-exported mistakes but never evidence; and a correction of a wrong LLM
+grade meant hand-editing the database. User constraints for the fix:
+no full transcripts in the database (growth must track useful evidence,
+not conversation volume); mistake descriptions stay short; human
+correction via CLI, result-only.
+
+**Decision:** structured observations, never conversations.
+
+- **Growth rule.** One session writes 1 session-ledger row + 1 evidence
+  row per planned concept + 0 or more mistake rows for live corrections
+  + 0 or more review rows. A two-hour session costs the same as a
+  five-minute one with the same plan. Transcripts stay in
+  `logs/<session_id>.log`, outside the database, as ephemeral
+  diagnostics.
+- **Versioned, additive migration** (`store.SCHEMA_VERSION`, `PRAGMA
+  user_version`). Fresh databases get full CHECKs (non-empty text,
+  confidence/quality in 0–1, corrected in 0/1, outcome whitelist);
+  pre-existing tables keep their definitions and rely on pydantic
+  validation enforced on every write path -- verified live data already
+  satisfies all of it (no empty strings, no out-of-range values, no
+  duplicate session-concept triples), so the UNIQUE index applies
+  cleanly to the real database.
+- **Atomic, idempotent session write** (`save_session_evidence`): all
+  evidence inserts plus their `corrected` flips commit in one `BEGIN
+  IMMEDIATE` transaction; `UNIQUE(session_id, domain, concept)`
+  case-insensitive with first-write-wins (`INSERT OR IGNORE`), so a
+  re-grade or a retried `finish_session` inserts nothing and flips
+  nothing new. Returns inserted/corrected counts.
+- **Compact session ledger** (`sessions` table: id, domain, objective,
+  concepts, started/finished timestamps, grading_status, grader_version
+  `session_grading/v1`). Written best-effort on create/finish (stderr
+  on failure, never breaking a session) -- observability, not scoring
+  input; scoring never reads it.
+- **Immutable evidence + append-only human reviews**
+  (`evidence_reviews`). The graded row is never edited; the latest
+  review per (session_id, domain, concept) wins for scoring with full
+  weight (1.0 -- a correction carries reviewer certainty by
+  construction), the full history stays for audit. Result-only:
+  attribution is not reviewable. `insert_review` fails fast on unknown
+  rows and on stale `previous_outcome`, so a correction made from an
+  outdated listing cannot silently apply. A corrected-to-correct
+  outcome flips matching mistakes, mirroring `record_evidence`.
+- **Short mistake summaries** (`MAX_EXPLANATION_CHARS = 280`,
+  truncated on write, old rows grandfathered) -- enough to personalize
+  ("you confused X with Y"), never a transcript fragment.
+- **Concurrency.** WAL + 5s busy_timeout on every connection; JSON
+  exports write to a temp sibling + `os.replace`, so neither a crash
+  nor concurrent writers leave half-written files.
+- **CLI, not tools.** `learning-os-observations list/review/history`
+  is deliberately *not* in `tools_interface`/MCP: correcting grades is
+  a learner-facing maintenance operation, not something the tutor
+  model should invoke mid-conversation. `learning-os-backup` now
+  refreshes all three exports (mistakes, evidence, reviews).
+- **Test isolation fix (found while building).** `create_session`
+  previously touched no durable state, so most session tests never set
+  `DB_PATH` -- the new ledger row made 13 of them write into the live
+  `mistakes.db` during the verification run. Fixed with a conftest
+  autouse fixture redirecting `DB_PATH` to tmp (explicit per-test
+  settings override it); the 13 junk ledger rows were deleted after
+  verifying no evidence referenced them (live counts intact: 20
+  mistakes, 38 evidence).
+
+**Status:** Decided (2026-09-12) -- built, `uv run pytest` 277 passed
+(258 before, 19 new: migration/validation/atomicity/idempotency,
+reviews overlay + staleness + ambiguity, truncation, ledger lifecycle,
+CLI list/review/history, backup refreshing all three exports).
+Verified against a copy of the live database (20 mistakes, 38 evidence:
+migration applies, no duplicate triples, all rows readable). Live
+behavior still unconfirmed by design: the next real session exercises
+the ledger + atomic write path for the first time.
+
+---
+
+## 64. Mandatory writes are backend-owned, not model-triggered — resolving #22's voice persistence gap
+
+**Context:** #22 documented, with unusually direct evidence, that
+`save_mistake` never fires in a Realtime voice session: 0 writes across 4
+real sessions, verified by SQLite row count, against both
+`gpt-realtime-mini` and full `gpt-realtime`, under two prompt versions
+including an explicitly "mandatory, not optional" rewrite — while the
+identical tool, schema, registry and instructions fire reliably through
+Chat Completions in the text loop. It was left as a known limitation, with
+the honest consequence that voice is "a real teaching loop, not yet a real
+memory loop."
+
+Put to OpenAI's API guidance directly, with that evidence. What came back:
+
+- The behaviour is **plausible but not documented** as a Realtime
+  guarantee or limitation. Realtime tool calls are model-*selected*
+  actions; the docs do not treat side-effect tools as automatically
+  executed. Official guidance explicitly says to verify tool calls and
+  application state independently — a natural spoken response does not
+  prove a tool ran. A tool whose result is irrelevant to the answer is
+  inherently vulnerable under `tool_choice: auto`, which matches #22's
+  hypothesis that audio-generating models deprioritise writes they don't
+  need in order to speak.
+- **Realtime 2 is not the fix.** It adds reasoning and
+  `parallel_tool_calls`, but the documentation makes no promise about
+  more reliable execution of side-effect-only tools. Worth testing on its
+  own merits; not a solution to this.
+- Realtime **does** support `tool_choice` as `auto`, `required`, or a
+  named function, settable on `response.create`.
+
+**Decision:**
+
+1. **Persist from the backend, inside the turn.** The hook already exists:
+   `realtime/loop.py` calls `record_turn(plan.session_id, "user",
+   event.transcript)` on `conversation.item.input_audio_transcription.
+   completed`. The authoritative transcript and session id are both in
+   hand at that point. Detect and write there. This is a hook, not a
+   rearchitecture.
+2. **The write must be idempotent** — a turn can be reprocessed and an
+   event redelivered, and a non-idempotent write duplicates rows in
+   `mistakes.db`. (The vault's `idempotence` note covers the property.)
+3. **A text model may extract or classify *what* the mistake was; it must
+   never decide *whether* to persist.** That decision is code. This is the
+   one correction to the approach first considered here — post-session
+   transcript extraction — which left a model in the persistence decision
+   and added latency for nothing.
+4. **Rejected: forced `tool_choice` for this tool.** It works, it is
+   supported, and it is worth knowing about — but it creates a model
+   response/tool-call turn, which in live speech means an interruption or
+   dead air, and it puts the model back into a path that does not need it.
+   Reserve forced `tool_choice` for tools whose result the conversation
+   actually consumes. If it is ever used, verify the exact function-tool
+   event shape against the current GA schema rather than against a
+   sketch — the guidance hedged on precisely that point.
+
+**Corollary to #1, worth stating explicitly:** #1 draws the line at "the
+model handles conversation and tool selection." Voice is the first place
+that line came under real pressure, and it sits one notch too generously.
+**A write that must happen cannot depend on the model electing to call
+it.** Tool selection is fine for optional and interactive tools; mandatory
+persistence belongs to the backend. This is not a Realtime limitation — it
+is a property of delegating control to a model, made visible by voice only
+because there the model has a competing pressure (maintaining spoken
+flow). The same exposure exists anywhere else a must-happen write is
+reachable only through model-chosen tool calls.
+
+**Status:** Decided (2026-09-11) — **not yet built.** Supersedes #22's
+"document as unresolved" resolution. Closing this is what makes voice
+sessions a real memory loop; until it is built, #22's practical
+consequence still describes production behaviour.

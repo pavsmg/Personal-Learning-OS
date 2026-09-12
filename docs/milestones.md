@@ -26,6 +26,55 @@ re-deriving scope from `vision.md`/`architecture.md` each time.
 
 ## Where to resume
 
+**Database hardening, 2026-09-12 (decisions.md #63).** The learning
+memory is now versioned (`PRAGMA user_version = 1`), atomic, and
+human-correctable: one transaction per session's evidence with
+`UNIQUE(session_id, domain, concept)` first-write-wins idempotency; a
+compact `sessions` ledger (plan metadata only, never transcripts);
+append-only `evidence_reviews` with result-only CLI correction
+(`uv run learning-os-observations list/review/history`, deliberately
+outside the model-facing tool contract); validated ranges
+(confidence/quality 0–1, non-empty text); WAL + busy_timeout; atomic
+JSON exports; `learning-os-backup` refreshes all three exports.
+`uv run pytest`: 277 passed (258 before, 19 new). Verified against a
+copy of the live DB (20 mistakes, 38 evidence intact). Found and fixed
+while building: session tests without `DB_PATH` wrote 13 junk ledger
+rows into the live DB (new conftest autouse fixture isolates them now;
+junk rows deleted, no evidence referenced them). Next real session is
+the first live exercise of the ledger + atomic write path.
+
+**Project guidance, 2026-09-11.** Added root `AGENTS.md` for coding agents:
+current milestone status, mandatory documentation checks, architecture and
+pedagogy constraints, data safety, package layout, and `uv` commands. No
+product behavior changed.
+
+**Voice persistence gap has a path now, 2026-09-11 (`decisions.md` #64).**
+#22's `save_mistake`-never-fires gap is no longer open-ended. Put to
+OpenAI's API guidance with #22's evidence: the behaviour is plausible but
+undocumented, Realtime 2 is explicitly *not* the fix, and forced
+`tool_choice` is supported but rejected here (it creates a tool-call turn,
+i.e. an interruption in live speech). The decided fix is to persist from
+the backend inside the turn — `realtime/loop.py` already has the hook, at
+the `record_turn` call on `input_audio_transcription.completed` — with an
+idempotent write, using a text model only to extract *what* the mistake
+was, never to decide *whether* to store it. **Not yet built**; until it is,
+#22's practical consequence still describes production behaviour. #22's
+Status now points here rather than reading as unresolved.
+
+**Vault-side change, 2026-09-11 (no backend work yet).** The Obsidian
+vault now carries a typed-relation layer — a `type:` on each structured
+note plus a closed 25-name relation vocabulary in frontmatter, specified
+in the vault's `Knowledge graph relations.md`. 102 notes are typed so far
+(~10%), with 163 relation values and a validated, cycle-free `requires`
+DAG. This matters here because it addresses the tradeoff `decisions.md`
+#37 left open in `most_important()`: measured on the typed subset, raw
+backlink ranking and transitive-`requires` ranking overlap on only 4 of
+the top 10. `decisions.md` #62 has the full evidence and the honest
+limits; `retrieval.md` describes the layer; `backlog.md` has six scoped
+consumer ideas under retrieval / knowledge graph. **Nothing is built in
+this backend against it yet** — #62 is Proposed, and the next step there
+is a reader, not more typing.
+
 **Status: Milestone 11 complete.** Next up: Milestone 12 — additional AI
 providers (`roadmap.md` step 12): evaluate at least one alternative
 realtime voice provider per the provider-resilience decision
@@ -250,6 +299,105 @@ or an explicitly-named topic, unlike #31's full-replacement approach,
 which isn't safe outside languages. `uv run pytest`: 238 passed (232
 before, 6 new). `backlog.md`'s "Extend the 'prefer tracked data...' fix"
 item is now fully closed — nothing left in that list.
+
+**2026-08-18 session — #58, real voice-session bug report.** User ran a
+real `learning-os-voice` electromagnetism session (speakers, open mic) and
+hit two problems: a nonsense transcript (Whisper-hallucination-shaped, not
+a real mis-hearing) and audio stutter right as the first response started.
+Two targeted fixes, not a redesign: `far_field` noise reduction (SDK docs'
+own recommendation for laptop/room mics vs. headsets) plus an `"en"`
+transcription language hint for non-language domains only (never forced
+for language-practice sessions, where the learner may genuinely be
+speaking the target language), and a 0.3s speaker warm-up delay before the
+model is allowed to start talking. `uv run pytest`: 241 passed (238
+before). Unit-tested at the config level only — **live verification still
+needed**, tracked in `backlog.md`.
+
+**2026-08-18 session — #59, second real voice-session bug report,
+deeper than #58.** User tried again after #58's fixes and hit new
+problems: mid-answer interruption, "didn't capture what I was saying at
+all," a real `response_cancel_not_active` API error, the closing recap's
+audio cut off mid-sentence, and raspy/buggy assistant audio specifically
+during its own turns. The real session log (`logs/1ee432b2-....log`)
+confirmed three of these concretely: one answer fragmented into two
+unrelated transcribed turns ("science." / "Thank you." two seconds
+apart), the exact API error, and a ~2-minute stall right after it.
+Root-caused, not guessed: `handle_tool_call` ran `call_tool` *
+synchronously* inside the same event loop that feeds the speaker and
+reads the mic — real vault I/O (a first-ever ~2s index build) blocking
+audio delivery during almost every turn, since grounding tool calls
+(rule 5) land right before the assistant starts talking. Fixed with
+`asyncio.to_thread`. Also fixed: `Speaker.wait_until_drained()` (closing
+audio was being cut off because `response.done` only means the server
+finished generating, not that local playback caught up), `silence_
+duration_ms` raised to 800ms (was fragmenting speech at the SDK's
+500ms default), and a defensive `response_in_progress` reset on the
+specific `response_cancel_not_active` error code (self-heals the state
+desync instead of risking it getting stuck). `uv run pytest`: 247 passed
+(241 before, 6 new). **Not yet verified live** — both #58 and #59 need
+the same next real voice session to check, tracked in `backlog.md`.
+
+**2026-08-18 session — #60, third real voice session: console
+readability and stale-response bleed-through.** User asked to review a
+third real session's log (RAG/agents-llm) and separately reported the
+console mixing "You said: ..." into the middle of the assistant's still-
+printing speech. The log *file* was already clean (confirmed directly —
+`"You said:"` never appears there, it's console-only); the actual
+mechanism was two-fold: (1) the assistant's transcript prints
+incrementally with no trailing newline until done, so any other print
+landing mid-stream visibly splits it — now guarded with an
+`assistant_line_open` flag that forces a newline first; (2) the same
+`response_cancel_not_active` race #59 found (and which recurred in this
+session) can leave stray delta/done events for an already-cancelled
+response with nothing distinguishing them from a live one — now filtered
+by tracking `current_response_id` and skipping any event whose id doesn't
+match, with barge-in explicitly invalidating it rather than waiting on a
+`response.done` that this exact race can already deliver unreliably.
+Not unit-tested — this logic lives inside the live event loop, the same
+stated boundary `test_realtime_loop.py` already draws around real
+audio/event orchestration; flagged in `decisions.md` #60 as a real gap
+worth a proper fake-connection test harness if this class of bug recurs
+again. `uv run pytest`: 247 passed, unchanged. **Not yet verified live**
+— #58, #59, and #60 all now need the same next real voice session to
+check together, tracked in `backlog.md`.
+
+**2026-08-18 session — #61, full Opus-reviewed hardening pass on the
+voice system.** After three real bug reports (#58/#59/#60) in three real
+sessions, asked Claude Opus 5 to independently review the whole real-time
+voice system rather than continuing to fix one report at a time. Found 16
+issues, several proving earlier fixes were incomplete: #59's `wait_
+until_drained` audio-drain math was still broken (it measured elapsed
+time since the *speaker's* first-ever write, not the *response's*, so
+any real idle gap made the estimate permanently negative — a silent
+no-op on essentially every real closing recap); #60's response-id
+staleness filter could make a barge-in during the closing recap skip the
+`response.done` the session-ending `break` was waiting on, so Enter
+could stop working; and the barge-in `response.cancel()` call itself —
+which #59 and #60 both built defenses around — turned out to be
+redundant with the server's own default auto-cancel behavior, and was
+the actual cause of every real `response_cancel_not_active` error seen so
+far. All fixed, plus: tool calls now run concurrently instead of
+blocking dispatch, exactly one follow-up response is created per turn
+regardless of how many tools it calls (confirmed multiple in real logs),
+resource acquisition (PipeWire module, subprocesses) moved inside
+try/finally with a startup reap for anything a hard-killed prior run
+leaked, barge-in now truncates the server-side conversation item (not
+just local playback), Ctrl+C no longer risks a multi-minute hang,
+transcription failures and unknown event types are logged instead of
+silently dropped, the transcription model/keywords/silence-duration/
+noise-reduction settings moved into `Settings` for A/B testing without
+code changes, and `finish_session` no longer opens a redundant second log
+handle. Built a new async-iterable `FakeRealtimeConnection` test harness
+(`test_realtime_loop_dispatch.py`) specifically to close the testing gap
+#60 flagged — the first tests to exercise `run_voice_session`'s actual
+dispatch logic, not just its helper functions. `uv run pytest`: 258
+passed (247 before, 11 new). Explicit non-goals, not silently dropped:
+automatic reconnect-on-disconnect, a smarter speaker-warmup readiness
+probe, reconsidering the echo-cancel module's sample rate, and a full
+chronological reorder of the log (a prompt-level mitigation shipped
+instead — see `decisions.md` #61). **Still not verified live** — #58
+through #61 all now need the same next real voice session to confirm,
+tracked together in `backlog.md`.
 
 **Post-MVP work (session planner robustness, prompt-rule refinements,
 anything pending a real conversation to confirm) now lives in

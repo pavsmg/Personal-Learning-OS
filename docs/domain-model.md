@@ -60,6 +60,32 @@ read alongside `evidence` rows as negative evidence, not migrated into
 this table — both stay the source of truth for conceptual understanding
 together.
 
+## Evidence reviews (decisions.md #63)
+
+A human correction of one evidence row's outcome. The graded row itself
+is immutable — never edited or deleted. Reviews form their own
+append-only history (`evidence_reviews`) and the latest review per
+(session_id, domain, concept) wins for scoring, with full weight: a
+correction carries reviewer certainty by construction. Result-only by
+design — the grader's concept/domain attribution is not reviewable, and
+the original grade stays on record for audit. A stale correction (made
+from an outdated listing) is rejected rather than applied.
+
+## Session ledger (decisions.md #63)
+
+Compact per-session metadata — id, domain, objective, concepts,
+started/finished timestamps, grading status, grader version. Never a
+transcript: those stay in `logs/<session_id>.log` as ephemeral
+diagnostics, outside the database. Growth rule: one session costs one
+ledger row plus one evidence row per planned concept, regardless of how
+long the conversation ran. The ledger is observability, not scoring
+input — scoring reads only mistakes, evidence, and reviews.
+
+Mistake explanations are capped at 280 characters (`MAX_EXPLANATION_CHARS`) —
+a one-line misconception summary for personalizing future questions, not
+a transcript fragment. Longer text is truncated on write; older rows are
+never rewritten by migration.
+
 ## Learner profile / mastery
 
 On a request like "quiz me on algorithms," the assistant retrieves the
