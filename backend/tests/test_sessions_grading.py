@@ -20,6 +20,18 @@ def grading_reply(grades: list[dict]) -> LLMReply:
     )
 
 
+def test_grade_session_prompt_warns_about_async_transcription_ordering():
+    """decisions.md #61: a real voice session log showed a USER line
+    appearing after the ASSISTANT reply it was actually answering, since
+    transcription completes asynchronously. The grader needs to know this
+    isn't necessarily out-of-order discussion."""
+    from learning_os.sessions.grading_prompt import build_grading_prompt
+
+    prompt = build_grading_prompt("physics", ["Electromagnetism"], "...")
+
+    assert "asynchronously" in prompt
+
+
 def test_grade_session_forces_the_grading_tool_choice():
     chat = FakeChat(grading_reply([{"concept": "Gradient descent", "outcome": "correct", "quality": 0.9, "rationale": "x"}]))
 

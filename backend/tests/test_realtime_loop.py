@@ -2,7 +2,106 @@ import asyncio
 import json
 
 from learning_os.conversation.prompt import END_SESSION_NUDGE
-from learning_os.realtime.loop import handle_tool_call, open_session, request_closing
+from learning_os.realtime.loop import _session_config, handle_tool_call, open_session, request_closing
+from learning_os.sessions.models import SessionPlan
+
+
+def make_plan(domain: str = "physics") -> SessionPlan:
+    return SessionPlan(
+        session_id="session-1",
+        domain=domain,
+        objective="Review Electromagnetism",
+        concepts=["Electromagnetism"],
+        target_difficulty="foundational",
+        expected_duration_minutes=15,
+    )
+
+
+def test_session_config_enables_far_field_noise_reduction():
+    config = _session_config(make_plan())
+
+    assert config["audio"]["input"]["noise_reduction"] == {"type": "far_field"}
+
+
+def test_session_config_sets_english_language_hint_for_non_language_domain():
+    config = _session_config(make_plan(domain="physics"))
+
+    assert config["audio"]["input"]["transcription"]["language"] == "en"
+
+
+def test_session_config_omits_language_hint_for_language_domain():
+    """A learner practicing Turkish may genuinely be speaking Turkish, not
+    English -- forcing "en" here would actively hurt transcription."""
+    config = _session_config(make_plan(domain="turkish"))
+
+    assert "language" not in config["audio"]["input"]["transcription"]
+
+
+def test_session_config_raises_silence_duration_above_the_sdk_default():
+    """decisions.md #59: a real session split one answer into unrelated
+    fragments because a mid-thought pause read as "done talking"."""
+    config = _session_config(make_plan())
+
+    assert config["audio"]["input"]["turn_detection"]["silence_duration_ms"] == 800
+
+
+def test_session_config_passes_planned_concepts_as_transcription_keywords():
+    """decisions.md #61: domain vocabulary ("Electromagnetism", "GraphRAG")
+    is exactly what a generic transcription model tends to mis-hear."""
+    plan = make_plan()
+
+    config = _session_config(plan)
+
+    assert config["audio"]["input"]["transcription"]["keywords"] == plan.concepts
+
+
+def test_session_config_reads_transcription_model_from_settings(monkeypatch):
+    from learning_os import config as config_module
+
+    config_module.get_settings.cache_clear()
+    monkeypatch.setenv("OPENAI_REALTIME_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+
+    config = _session_config(make_plan())
+
+    assert config["audio"]["input"]["transcription"]["model"] == "gpt-4o-mini-transcribe"
+    config_module.get_settings.cache_clear()
+
+
+def test_handle_tool_call_runs_synchronous_work_in_a_thread(monkeypatch):
+    """decisions.md #59: a slow synchronous tool call (real vault I/O, a
+    first-ever ~2s vault-index build) must not stall the rest of this
+    loop's event processing -- confirmed here by proving a concurrently
+    scheduled task keeps ticking while the "tool call" is blocking-sleeping
+    on a real OS thread, not the event loop."""
+    import time
+
+    from learning_os.realtime import loop as loop_module
+
+    def slow_sync_tool(name, **kwargs):  # matches the real call_tool(name, **kwargs) signature
+        time.sleep(0.2)
+        return {"ok": True}
+
+    monkeypatch.setattr(loop_module, "call_tool", slow_sync_tool)
+
+    async def scenario() -> int:
+        ticks = 0
+        stop = False
+
+        async def tick_counter() -> None:
+            nonlocal ticks
+            while not stop:
+                ticks += 1
+                await asyncio.sleep(0.01)
+
+        counter_task = asyncio.create_task(tick_counter())
+        await loop_module.handle_tool_call("whatever", {})
+        stop = True
+        await counter_task
+        return ticks
+
+    ticks = asyncio.run(scenario())
+
+    assert ticks > 5  # the event loop kept running many ticks during the 0.2s "tool call"
 
 
 def write_vault(tmp_path, files: dict[str, str]):

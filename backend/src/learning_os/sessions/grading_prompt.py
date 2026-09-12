@@ -9,6 +9,14 @@ transcript never actually got to it):
 Full session transcript:
 {transcript}
 
+Note on voice sessions specifically: a USER line's position reflects when \
+its transcription finished processing, not necessarily when it was \
+actually spoken — voice transcription runs asynchronously, so a USER line \
+can occasionally appear immediately after an ASSISTANT line it was really \
+the answer to, rather than before it. If a USER line seems to respond to \
+what follows it rather than what precedes it, judge it as answering the \
+nearest question it actually addresses, not strictly the line above it.
+
 For each planned concept, output exactly one grade:
 
 - not_reached: the concept was never actually quizzed — mentioned in \
